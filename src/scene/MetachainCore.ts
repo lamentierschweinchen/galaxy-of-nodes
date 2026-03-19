@@ -10,6 +10,7 @@ export class MetachainCore {
   readonly light: THREE.PointLight;
   private material: THREE.ShaderMaterial;
   private time: number = 0;
+  private pulseBoost: number = 0; // decays from 1.0 on triggerPulse
 
   constructor() {
     const geometry = new THREE.SphereGeometry(3, 32, 32);
@@ -39,22 +40,29 @@ export class MetachainCore {
     this.time += dt;
     this.material.uniforms.uTime.value = this.time;
 
-    // Ambient pulse: sine wave
-    const pulse = 0.3 + 0.3 * Math.sin(this.time * 2.0);
-    this.material.uniforms.uPulse.value = pulse;
+    // Decay pulse boost
+    if (this.pulseBoost > 0.001) {
+      this.pulseBoost *= Math.exp(-dt * 2.5); // ~0.4s visible decay
+    } else {
+      this.pulseBoost = 0;
+    }
 
-    // Scale oscillation
-    const scale = 1.0 + 0.03 * Math.sin(this.time * 2.0);
+    // Ambient pulse + triggered pulse overlay
+    const basePulse = 0.3 + 0.3 * Math.sin(this.time * 2.0);
+    const totalPulse = basePulse + this.pulseBoost * 0.7;
+    this.material.uniforms.uPulse.value = Math.min(totalPulse, 1.0);
+
+    // Scale: ambient oscillation + pulse boost
+    const scale = 1.0 + 0.03 * Math.sin(this.time * 2.0) + this.pulseBoost * 0.12;
     this.mesh.scale.setScalar(scale);
 
-    // Light intensity follows pulse
-    this.light.intensity = 0.1 + pulse * 0.1;
+    // Light intensity follows combined pulse
+    this.light.intensity = 0.1 + totalPulse * 0.15;
   }
 
   /** Trigger a strong pulse (e.g., on new metachain block) */
   triggerPulse(): void {
-    this.material.uniforms.uPulse.value = 1.0;
-    this.mesh.scale.setScalar(1.15);
+    this.pulseBoost = 1.0;
   }
 
   dispose(): void {

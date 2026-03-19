@@ -58,8 +58,9 @@ export class Galaxy {
   private hud: HUD;
   private raycaster: ValidatorRaycaster;
 
-  // Post-processing uniforms that need per-frame updates
+  // Post-processing passes needing per-frame/resize updates
   private filmGrainPass: ShaderPass;
+  private caPass: ShaderPass;
 
   constructor(container: HTMLElement) {
     const width = container.clientWidth;
@@ -196,7 +197,7 @@ export class Galaxy {
     });
     this.composer.addPass(this.filmGrainPass);
 
-    const caPass = new ShaderPass({
+    this.caPass = new ShaderPass({
       uniforms: {
         tDiffuse: { value: null },
         uIntensity: { value: 1.5 },
@@ -205,7 +206,7 @@ export class Galaxy {
       vertexShader: chromaticAberrationVertexShader,
       fragmentShader: chromaticAberrationFragmentShader,
     });
-    this.composer.addPass(caPass);
+    this.composer.addPass(this.caPass);
   }
 
   update(dt: number): void {
@@ -255,6 +256,7 @@ export class Galaxy {
     this.cameraController.camera.aspect = width / height;
     this.cameraController.camera.updateProjectionMatrix();
     this.composer.setSize(width, height);
+    this.caPass.uniforms.uResolution.value.set(width, height);
   }
 
   dispose(): void {

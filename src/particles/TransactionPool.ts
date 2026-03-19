@@ -185,38 +185,35 @@ export class TransactionPool {
   update(dt: number): void {
     this.activeCount = 0;
 
+    // Stable indices: each particle writes to its own slot (no compaction).
+    // Inactive particles are hidden by setting size=0.
     for (let i = 0; i < MAX_PARTICLES; i++) {
       const p = this.particles[i];
-      if (!p.active) continue;
+      const i3 = i * 3;
+
+      if (!p.active) {
+        // Hide inactive particles
+        this.sizes[i] = 0;
+        continue;
+      }
 
       p.age += dt;
 
       // Handle delayed particles (negative age)
       if (p.age < 0) {
-        // Not visible yet — set far away
-        const i3 = this.activeCount * 3;
-        this.positions[i3] = 0;
-        this.positions[i3 + 1] = -9999;
-        this.positions[i3 + 2] = 0;
-        this.sizes[this.activeCount] = 0;
-        this.brightnesses[this.activeCount] = 0;
-        this.lives[this.activeCount] = 0;
-        this.colors[i3] = 0;
-        this.colors[i3 + 1] = 0;
-        this.colors[i3 + 2] = 0;
-        this.activeCount++;
+        this.sizes[i] = 0;
         continue;
       }
 
       if (p.age >= p.lifetime) {
         p.active = false;
+        this.sizes[i] = 0;
         continue;
       }
 
+      this.activeCount++;
       const t = p.age / p.lifetime; // 0 → 1
       const life = 1.0 - t;
-      const idx = this.activeCount;
-      const i3 = idx * 3;
 
       // Compute position along path
       if (p.isCrossShard) {
@@ -233,20 +230,18 @@ export class TransactionPool {
       this.colors[i3 + 1] = p.color.g;
       this.colors[i3 + 2] = p.color.b;
 
-      this.sizes[idx] = p.size;
-      this.brightnesses[idx] = p.brightness;
-      this.lives[idx] = life;
-
-      this.activeCount++;
+      this.sizes[i] = p.size;
+      this.brightnesses[i] = p.brightness;
+      this.lives[i] = life;
     }
 
-    // Update GPU buffers
+    // Update GPU buffers — draw all slots, inactive hidden by size=0
     (this.geometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
     (this.geometry.getAttribute('aColor') as THREE.BufferAttribute).needsUpdate = true;
     (this.geometry.getAttribute('aSize') as THREE.BufferAttribute).needsUpdate = true;
     (this.geometry.getAttribute('aBrightness') as THREE.BufferAttribute).needsUpdate = true;
     (this.geometry.getAttribute('aLife') as THREE.BufferAttribute).needsUpdate = true;
-    this.geometry.setDrawRange(0, this.activeCount);
+    this.geometry.setDrawRange(0, MAX_PARTICLES);
   }
 
   getActiveCount(): number {

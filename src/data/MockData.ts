@@ -97,8 +97,14 @@ export class MockDataGenerator {
   private epoch = 1247;
   private txCounter = 0;
 
+  // Cached lookups (avoid per-frame allocations)
+  private shardValidatorMap: Map<number, MockValidator[]> = new Map();
+  private blsValidatorMap: Map<string, MockValidator> = new Map();
+  private cachedOnlineCount = 0;
+
   constructor() {
     this.generateValidators();
+    this.buildCaches();
     // Initialize block nonces per shard
     for (const shard of [0, 1, 2, METACHAIN_SHARD_ID]) {
       this.blockNonces.set(shard, 10000 + Math.floor(Math.random() * 5000));
@@ -161,6 +167,19 @@ export class MockDataGenerator {
     }
   }
 
+  private buildCaches(): void {
+    this.shardValidatorMap.clear();
+    this.blsValidatorMap.clear();
+    for (const v of this.validators) {
+      if (!this.shardValidatorMap.has(v.shard)) {
+        this.shardValidatorMap.set(v.shard, []);
+      }
+      this.shardValidatorMap.get(v.shard)!.push(v);
+      this.blsValidatorMap.set(v.bls, v);
+    }
+    this.cachedOnlineCount = this.validators.filter((v) => v.online).length;
+  }
+
   getValidators(): MockValidator[] {
     return this.validators;
   }
@@ -181,14 +200,14 @@ export class MockDataGenerator {
     return this.validators[index];
   }
 
-  /** Get a validator by BLS key */
+  /** Get a validator by BLS key (O(1)) */
   getValidatorByBls(bls: string): MockValidator | undefined {
-    return this.validators.find((v) => v.bls === bls);
+    return this.blsValidatorMap.get(bls);
   }
 
-  /** Get random validator from a specific shard */
+  /** Get random validator from a specific shard (O(1) lookup, O(1) pick) */
   getRandomValidatorInShard(shard: number): MockValidator {
-    const shardValidators = this.validators.filter((v) => v.shard === shard);
+    const shardValidators = this.shardValidatorMap.get(shard) ?? this.validators;
     return shardValidators[Math.floor(Math.random() * shardValidators.length)];
   }
 
@@ -293,6 +312,6 @@ export class MockDataGenerator {
   }
 
   getOnlineCount(): number {
-    return this.validators.filter((v) => v.online).length;
+    return this.cachedOnlineCount;
   }
 }

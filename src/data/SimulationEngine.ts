@@ -33,6 +33,10 @@ export class SimulationEngine {
   private tpsWindow: number[] = [];
   private currentTps = 0;
 
+  // Staggered burst queue (avoids setTimeout)
+  private burstQueue: import('./MockData').MockTransaction[] = [];
+  private burstSpawnTimer = 0;
+
   // Callbacks
   onNewBlock?: (block: MockBlock) => void;
   onStatsUpdate?: (stats: { round: number; epoch: number; tps: number; onlineCount: number }) => void;
@@ -79,6 +83,19 @@ export class SimulationEngine {
     if (this.burstTimer >= this.burstInterval) {
       this.burstTimer -= this.burstInterval;
       this.supernovaBurst();
+    }
+
+    // --- Drain burst queue (staggered over frames) ---
+    if (this.burstQueue.length > 0) {
+      this.burstSpawnTimer += dt;
+      if (this.burstSpawnTimer >= 0.05) { // spawn batch every 50ms
+        this.burstSpawnTimer = 0;
+        const batch = this.burstQueue.splice(0, 20);
+        this.tpsAccumulator += batch.length;
+        for (const tx of batch) {
+          this.spawnTxParticle(tx);
+        }
+      }
     }
 
     // --- TPS calculation ---
@@ -150,20 +167,10 @@ export class SimulationEngine {
 
   private supernovaBurst(): void {
     const txs = this.mockData.generateSupernovaBurst();
-    this.tpsAccumulator += txs.length;
 
-    // Stagger spawning over 0.5s for visual drama
-    let delay = 0;
-    const batchSize = 20;
-    for (let i = 0; i < txs.length; i += batchSize) {
-      const batch = txs.slice(i, i + batchSize);
-      setTimeout(() => {
-        for (const tx of batch) {
-          this.spawnTxParticle(tx);
-        }
-      }, delay);
-      delay += 100;
-    }
+    // Queue for staggered spawning over multiple frames (no setTimeout)
+    this.burstQueue.push(...txs);
+    this.burstSpawnTimer = 0;
 
     // Trigger all shard proposer pulses for dramatic effect
     for (const shard of [0, 1, 2, METACHAIN_SHARD_ID]) {
