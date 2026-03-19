@@ -3,8 +3,6 @@ import { starVertexShader, starFragmentShader } from '../shaders/star';
 import { shardColorWithVariation, ratingToBrightness, stakeToSize } from '../utils/colors';
 import { seededSequence, sphericalRandom } from '../utils/math';
 import {
-  MOCK_VALIDATOR_COUNT,
-  VALIDATORS_PER_SHARD,
   VALIDATOR_CLUSTER_RADIUS,
   METACHAIN_SHARD_ID,
 } from '../utils/config';
@@ -45,8 +43,8 @@ export class ValidatorField {
 
   private count: number;
 
-  constructor(clusters: ShardCluster[]) {
-    this.count = MOCK_VALIDATOR_COUNT;
+  constructor(validators: ValidatorData[], clusters: ShardCluster[]) {
+    this.count = validators.length;
 
     this.positions = new Float32Array(this.count * 3);
     this.localOffsets = new Float32Array(this.count * 3);
@@ -58,9 +56,7 @@ export class ValidatorField {
     this.proposerPulses = new Float32Array(this.count);
     this.shardIds = new Uint32Array(this.count);
 
-    // Generate mock validators
-    const mockValidators = this.generateMockData();
-    this.populateAttributes(mockValidators, clusters);
+    this.populateAttributes(validators, clusters);
 
     this.geometry = new THREE.BufferGeometry();
     this.geometry.setAttribute('position', new THREE.BufferAttribute(this.positions, 3));
@@ -87,31 +83,6 @@ export class ValidatorField {
 
     this.points = new THREE.Points(this.geometry, this.material);
     this.points.frustumCulled = false;
-  }
-
-  private generateMockData(): ValidatorData[] {
-    const validators: ValidatorData[] = [];
-    // Metachain has fewer validators (400), shards have ~933 each
-    const shardCounts: [number, number][] = [
-      [0, 933],
-      [1, 933],
-      [2, 934],
-      [METACHAIN_SHARD_ID, 400],
-    ];
-
-    for (const [shardId, count] of shardCounts) {
-      for (let i = 0; i < count; i++) {
-        const bls = `mock_shard${shardId}_validator${i}_${Math.random().toString(36).slice(2, 10)}`;
-        validators.push({
-          bls,
-          shard: shardId,
-          rating: 40 + Math.random() * 60, // 40-100
-          stake: (2500 + Math.random() * 7500).toFixed(0) + '000000000000000000', // 2500-10000 EGLD
-          online: Math.random() > 0.05,
-        });
-      }
-    }
-    return validators;
   }
 
   private populateAttributes(

@@ -13,7 +13,7 @@ export class MetachainCore {
   private pulseBoost: number = 0; // decays from 1.0 on triggerPulse
 
   constructor() {
-    const geometry = new THREE.SphereGeometry(3, 32, 32);
+    const geometry = new THREE.SphereGeometry(4.5, 32, 32);
 
     this.material = new THREE.ShaderMaterial({
       vertexShader: metachainVertexShader,
@@ -32,7 +32,7 @@ export class MetachainCore {
     this.mesh.position.set(0, 0, 0);
 
     // Subtle point light for illuminating nearby validators
-    this.light = new THREE.PointLight(0xffffff, 0.15, 40, 2);
+    this.light = new THREE.PointLight(0xffffff, 0.25, 60, 2);
     this.light.position.set(0, 0, 0);
   }
 

@@ -4,12 +4,12 @@ import { crossShardBezier } from '../utils/math';
 
 const MAX_PARTICLES = 800;
 
-// Transaction type → color mapping
+// Transaction type → color mapping (saturated to stand out from starfield)
 const TX_COLORS: Record<string, THREE.Color> = {
-  transfer: new THREE.Color(1.0, 0.95, 0.85),     // warm white
-  scCall: new THREE.Color(0.4, 0.85, 1.0),         // electric cyan
-  esdtTransfer: new THREE.Color(0.85, 0.7, 1.0),   // soft purple
-  crossShard: new THREE.Color(1.0, 1.0, 1.0),      // pure white (overrides type for cross-shard)
+  transfer: new THREE.Color(1.0, 0.85, 0.5),       // warm gold
+  scCall: new THREE.Color(0.3, 0.9, 1.0),           // bright cyan
+  esdtTransfer: new THREE.Color(0.9, 0.5, 1.0),     // vivid purple
+  crossShard: new THREE.Color(1.0, 0.95, 0.7),      // bright warm white
 };
 
 interface TxParticle {
@@ -138,11 +138,11 @@ export class TransactionPool {
     }
 
     // Size: cross-shard larger, high-value larger
-    const baseSize = isCrossShard ? 3.5 : 2.0;
-    p.size = baseSize + valueBrightness * 3.0;
+    const baseSize = isCrossShard ? 4.5 : 3.0;
+    p.size = baseSize + valueBrightness * 3.5;
 
-    // Brightness
-    p.brightness = 0.5 + valueBrightness * 0.5;
+    // Brightness — tx particles should be noticeably bright
+    p.brightness = 0.7 + valueBrightness * 0.3;
   }
 
   /**

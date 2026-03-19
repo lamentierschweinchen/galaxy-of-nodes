@@ -75,9 +75,9 @@ export class DustField {
       colors[i3 + 1] = dustColor.g;
       colors[i3 + 2] = dustColor.b;
 
-      // Very small, very dim
-      sizes[i] = 0.3 + Math.random() * 0.7;
-      brightnesses[i] = 0.05 + Math.random() * 0.1;
+      // Small but visible
+      sizes[i] = 0.5 + Math.random() * 1.0;
+      brightnesses[i] = 0.08 + Math.random() * 0.15;
       phases[i] = Math.random();
     }
 

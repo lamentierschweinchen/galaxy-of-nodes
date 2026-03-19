@@ -53,40 +53,41 @@ export class CameraController {
     }, CAMERA_INACTIVITY_RESUME_MS);
   }
 
+  // Zoom animation state (integrated into update loop)
+  private zoomProgress = -1;
+  private zoomStartPos = new THREE.Vector3();
+  private zoomEndPos = new THREE.Vector3();
+  private zoomStartTarget = new THREE.Vector3();
+  private zoomEndTarget = new THREE.Vector3();
+  private zoomDuration = 1.2; // seconds
+
   /** Smoothly zoom camera toward a world position (click-to-zoom) */
   zoomTo(target: THREE.Vector3): void {
     this.autoOrbit = false;
     this.resetInactivityTimer();
 
-    // Animate controls target and camera position toward the target
     const direction = new THREE.Vector3()
       .subVectors(this.camera.position, target)
       .normalize();
     const zoomDistance = 30;
-    const newCamPos = target.clone().add(direction.multiplyScalar(zoomDistance));
 
-    // Simple smooth transition using lerp over multiple frames
-    const startPos = this.camera.position.clone();
-    const startTarget = this.controls.target.clone();
-    let progress = 0;
-
-    const animate = () => {
-      progress += 0.03;
-      if (progress > 1) progress = 1;
-      const ease = 1 - Math.pow(1 - progress, 3); // ease-out cubic
-
-      this.camera.position.lerpVectors(startPos, newCamPos, ease);
-      this.controls.target.lerpVectors(startTarget, target, ease);
-
-      if (progress < 1) {
-        requestAnimationFrame(animate);
-      }
-    };
-    requestAnimationFrame(animate);
+    this.zoomStartPos.copy(this.camera.position);
+    this.zoomEndPos.copy(target).add(direction.multiplyScalar(zoomDistance));
+    this.zoomStartTarget.copy(this.controls.target);
+    this.zoomEndTarget.copy(target);
+    this.zoomProgress = 0;
   }
 
   update(dt: number): void {
-    if (this.autoOrbit) {
+    // Zoom animation (runs within the main loop, framerate-independent)
+    if (this.zoomProgress >= 0 && this.zoomProgress < 1) {
+      this.zoomProgress += dt / this.zoomDuration;
+      if (this.zoomProgress > 1) this.zoomProgress = 1;
+      const ease = 1 - Math.pow(1 - this.zoomProgress, 3); // ease-out cubic
+
+      this.camera.position.lerpVectors(this.zoomStartPos, this.zoomEndPos, ease);
+      this.controls.target.lerpVectors(this.zoomStartTarget, this.zoomEndTarget, ease);
+    } else if (this.autoOrbit) {
       this.orbitAngle += CAMERA_ORBIT_SPEED * dt;
       const r = CAMERA_ORBIT_RADIUS;
       this.camera.position.x = Math.cos(this.orbitAngle) * r;

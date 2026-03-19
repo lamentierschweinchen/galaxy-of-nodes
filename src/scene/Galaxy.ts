@@ -107,9 +107,7 @@ export class Galaxy {
     this.starfield = new Starfield();
     this.scene.add(this.starfield.points);
 
-    // Use rich mock validators instead of simple random data
-    this.validatorField = new ValidatorField(this.clusters);
-    this.validatorField.setValidators(this.mockData.getValidatorData(), this.clusters);
+    this.validatorField = new ValidatorField(this.mockData.getValidatorData(), this.clusters);
     this.scene.add(this.validatorField.points);
 
     this.metachainCore = new MetachainCore();

@@ -54,14 +54,20 @@ export function crossShardBezier(
   t: number,
   out: THREE.Vector3,
 ): void {
-  // Control points: pulled 40% toward origin, arced upward
-  const p1x = start.x * 0.6;
-  const p1y = start.y + 5;
-  const p1z = start.z * 0.6;
+  // Control points: pulled toward origin (metachain), arced upward dramatically
+  // The arc height scales with the distance between source and destination
+  const dx = end.x - start.x;
+  const dz = end.z - start.z;
+  const dist = Math.sqrt(dx * dx + dz * dz);
+  const arcHeight = dist * 0.35; // 35% of distance as arc height
 
-  const p2x = end.x * 0.6;
-  const p2y = end.y + 5;
-  const p2z = end.z * 0.6;
+  const p1x = start.x * 0.4; // pull 60% toward origin
+  const p1y = start.y + arcHeight;
+  const p1z = start.z * 0.4;
+
+  const p2x = end.x * 0.4;
+  const p2y = end.y + arcHeight;
+  const p2z = end.z * 0.4;
 
   const omt = 1 - t;
   const omt2 = omt * omt;
