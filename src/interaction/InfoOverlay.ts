@@ -175,6 +175,7 @@ export class InfoOverlay {
 
   private lastFeedUpdate = 0;
   private feedUpdateInterval = 1.5; // update feed every 1.5s (not every frame)
+  private lastFeedSignature = '';
 
   updateTransactionFeed(txs: TransactionData[], dt: number): void {
     if (!this.active || txs.length === 0) return;
@@ -184,6 +185,13 @@ export class InfoOverlay {
     this.lastFeedUpdate = 0;
 
     const toShow = txs.slice(0, 10);
+    const nextSignature = toShow.map((tx) => tx.txHash).join('|');
+
+    if (nextSignature === this.lastFeedSignature) {
+      return;
+    }
+
+    this.lastFeedSignature = nextSignature;
 
     this.txFeedList.innerHTML = '';
 

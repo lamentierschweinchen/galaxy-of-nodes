@@ -359,9 +359,14 @@ export class Galaxy {
           }
         },
         onNewTransactions: (txs) => {
-          for (const tx of txs) {
+          const latestForFeed = txs.slice(0, 25);
+          if (latestForFeed.length > 0) {
+            this.liveRecentTransactions = latestForFeed;
+          }
+
+          const particleTxs = txs.length > 25 ? txs.slice(25) : txs;
+          for (const tx of particleTxs) {
             this.spawnLiveTransactionParticle(tx);
-            this.addToRecentLiveTxs(tx);
           }
         },
         onStatsUpdate: (stats) => {

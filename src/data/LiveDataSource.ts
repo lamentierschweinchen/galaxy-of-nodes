@@ -45,6 +45,22 @@ interface ApiStats {
   [key: string]: unknown;
 }
 
+interface ApiTransaction {
+  txHash?: string;
+  hash?: string;
+  sender?: string;
+  receiver?: string;
+  senderShard?: number;
+  receiverShard?: number;
+  sourceShard?: number;
+  destinationShard?: number;
+  value?: string | number;
+  status?: string;
+  function?: string;
+  action?: string;
+  [key: string]: unknown;
+}
+
 function getListData<T>(payload: ApiListResponse<T>): T[] {
   if (Array.isArray(payload)) return payload;
   return Array.isArray(payload.data) ? payload.data : [];
@@ -65,6 +81,7 @@ export class LiveDataSource implements DataSource {
   private pollTimer: number | null = null;
   private readonly lastBlockNonces = new Map<number, number>();
   private lastTotalTransactions: number | null = null;
+  private lastStatsRequestAtMs: number | null = null;
   private skipNextBlockPoll = false;
 
   private currentStats: NetworkStats = {
@@ -89,6 +106,7 @@ export class LiveDataSource implements DataSource {
     this.currentStats = await this.fetchStats();
     this.currentRound = this.computeRoundFromStats(this.currentStats);
     this.lastTotalTransactions = this.currentStats.transactions;
+    this.lastStatsRequestAtMs = Date.now();
 
     const shards = [0, 1, 2, METACHAIN_SHARD_ID];
     for (const shard of shards) {
@@ -178,20 +196,31 @@ export class LiveDataSource implements DataSource {
     }
 
     const nextStats = await this.fetchStats();
+    const nowMs = Date.now();
     const previousTotal = this.lastTotalTransactions ?? nextStats.transactions;
     const deltaTransactions = Math.max(0, nextStats.transactions - previousTotal);
+    const elapsedMs = this.lastStatsRequestAtMs === null
+      ? this.pollIntervalMs
+      : Math.max(1, nowMs - this.lastStatsRequestAtMs);
+    const elapsedSeconds = elapsedMs / 1000;
+    const computedTps = deltaTransactions / elapsedSeconds;
+
+    this.lastStatsRequestAtMs = nowMs;
     this.lastTotalTransactions = nextStats.transactions;
     this.currentStats = nextStats;
     this.currentRound = this.computeRoundFromStats(nextStats);
 
     const freshTxs = this.createSyntheticTransactionsFromDelta(deltaTransactions);
 
-    if (freshTxs.length > 0) {
-      this.callbacks.onNewTransactions(freshTxs);
+    const latestTransactions = await this.fetchLatestTransactions(25);
+    const emittedTransactions = [...latestTransactions, ...freshTxs];
+
+    if (emittedTransactions.length > 0) {
+      this.callbacks.onNewTransactions(emittedTransactions);
     }
 
     this.callbacks.onStatsUpdate({
-      tps: deltaTransactions,
+      tps: computedTps,
       totalTransactions: this.currentStats.transactions,
       epoch: this.currentStats.epoch,
       round: this.currentRound,
@@ -300,8 +329,71 @@ export class LiveDataSource implements DataSource {
     return Math.max(0, safeRoundsPerEpoch - passedInEpoch);
   }
 
+  private async fetchLatestTransactions(size: number): Promise<TransactionData[]> {
+    const payload = await this.fetchJson<ApiListResponse<ApiTransaction>>(
+      `/transactions?size=${size}&order=desc`,
+      {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+          Pragma: 'no-cache',
+        },
+      },
+    );
+
+    const txs = getListData(payload);
+
+    return txs
+      .filter((tx) => Boolean(tx.txHash || tx.hash))
+      .map((tx): TransactionData => {
+        const senderShardCandidate = tx.senderShard ?? tx.sourceShard;
+        const receiverShardCandidate = tx.receiverShard ?? tx.destinationShard;
+
+        const senderShard =
+          typeof senderShardCandidate === 'number' && Number.isFinite(senderShardCandidate)
+            ? Number(senderShardCandidate)
+            : 0;
+        const receiverShard =
+          typeof receiverShardCandidate === 'number' && Number.isFinite(receiverShardCandidate)
+            ? Number(receiverShardCandidate)
+            : senderShard;
+
+        const fn = tx.function ? String(tx.function) : undefined;
+        const action = tx.action ? String(tx.action).toLowerCase() : '';
+        const lowerFn = fn?.toLowerCase() ?? '';
+
+        let type: TransactionData['type'] = 'transfer';
+        if (action.includes('esdt') || lowerFn.includes('esdt')) {
+          type = 'esdtTransfer';
+        } else if (fn || action.includes('smart contract') || action.includes('sc call')) {
+          type = 'scCall';
+        }
+
+        return {
+          txHash: String(tx.txHash ?? tx.hash),
+          sender: String(tx.sender ?? ''),
+          receiver: String(tx.receiver ?? ''),
+          senderShard,
+          receiverShard,
+          value: String(tx.value ?? '0'),
+          status: String(tx.status ?? 'latest'),
+          function: fn,
+          type,
+        };
+      });
+  }
+
   private async fetchStats(): Promise<NetworkStats> {
-    const payload = await this.fetchJson<ApiStats>('/stats');
+    const payload = await this.fetchJson<ApiStats>(
+      '/stats',
+      {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+          Pragma: 'no-cache',
+        },
+      },
+    );
 
     return {
       shards: Number(payload.shards ?? 4),
@@ -314,8 +406,8 @@ export class LiveDataSource implements DataSource {
     };
   }
 
-  private async fetchJson<T>(path: string): Promise<T> {
-    const response = await fetch(`${this.apiBase}${path}`);
+  private async fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
+    const response = await fetch(`${this.apiBase}${path}`, init);
     if (!response.ok) {
       throw new Error(`HTTP ${response.status} for ${this.apiBase}${path}`);
     }
