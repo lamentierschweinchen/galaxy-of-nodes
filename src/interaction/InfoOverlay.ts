@@ -55,6 +55,15 @@ export class InfoOverlay {
       padding: 0;
       line-height: 1;
     `;
+    this.toggleBtn.setAttribute('aria-label', 'Toggle network info overlay');
+    this.toggleBtn.setAttribute('title', 'Network info');
+    this.toggleBtn.addEventListener('focus', () => {
+      this.toggleBtn.style.outline = '1px solid rgba(255, 255, 255, 0.5)';
+      this.toggleBtn.style.outlineOffset = '2px';
+    });
+    this.toggleBtn.addEventListener('blur', () => {
+      this.toggleBtn.style.outline = 'none';
+    });
     this.toggleBtn.addEventListener('mouseenter', () => {
       this.toggleBtn.style.borderColor = 'rgba(255, 255, 255, 0.5)';
       this.toggleBtn.style.color = 'rgba(255, 255, 255, 0.8)';

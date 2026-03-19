@@ -35,6 +35,8 @@ export class AudioController {
       padding: 0;
     `;
 
+    this.button.setAttribute('aria-label', 'Toggle sound');
+    this.button.setAttribute('title', 'Toggle sound');
     this.button.addEventListener('mouseenter', () => {
       this.button.style.borderColor = 'rgba(255, 255, 255, 0.35)';
       this.button.style.background = 'rgba(5, 5, 16, 0.8)';
@@ -44,6 +46,13 @@ export class AudioController {
       this.button.style.background = 'rgba(5, 5, 16, 0.6)';
     });
 
+    this.button.addEventListener('focus', () => {
+      this.button.style.outline = '1px solid rgba(255, 255, 255, 0.5)';
+      this.button.style.outlineOffset = '2px';
+    });
+    this.button.addEventListener('blur', () => {
+      this.button.style.outline = 'none';
+    });
     this.button.addEventListener('click', () => this.toggle());
 
     document.body.appendChild(this.button);
