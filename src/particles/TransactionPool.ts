@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { particleVertexShader, particleFragmentShader } from '../shaders/particle';
 import { crossShardBezier } from '../utils/math';
 
-const MAX_PARTICLES = 500;
+const MAX_PARTICLES = 800;
 
 // Transaction type → color mapping
 const TX_COLORS: Record<string, THREE.Color> = {

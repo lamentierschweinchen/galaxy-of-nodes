@@ -9,7 +9,7 @@ export class AudioController {
 
   constructor() {
     // Audio element
-    this.audio = new Audio('/Consensus Pulse (V2).mp3');
+    this.audio = new Audio('/consensus-pulse.mp3');
     this.audio.loop = true;
     this.audio.volume = 0.3;
 

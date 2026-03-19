@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { starVertexShader, starFragmentShader } from '../shaders/star';
-import { shardColorWithVariation, ratingToBrightness, powerLawSize } from '../utils/colors';
+import { shardColorWithVariation, ratingToBrightness, stakeToSize } from '../utils/colors';
 import { seededSequence, sphericalRandom } from '../utils/math';
 import {
   MOCK_VALIDATOR_COUNT,
@@ -33,6 +33,7 @@ export class ValidatorField {
   private brightnesses: Float32Array;
   private phases: Float32Array;
   private proposerPulses: Float32Array;
+  private baseBrightnesses: Float32Array;
 
   // Original positions relative to cluster center (for rotation)
   private localOffsets: Float32Array;
@@ -52,6 +53,7 @@ export class ValidatorField {
     this.colors = new Float32Array(this.count * 3);
     this.sizes = new Float32Array(this.count);
     this.brightnesses = new Float32Array(this.count);
+    this.baseBrightnesses = new Float32Array(this.count);
     this.phases = new Float32Array(this.count);
     this.proposerPulses = new Float32Array(this.count);
     this.shardIds = new Uint32Array(this.count);
@@ -157,11 +159,14 @@ export class ValidatorField {
       this.colors[i3 + 1] = color.g;
       this.colors[i3 + 2] = color.b;
 
-      // Size from stake (mock: power-law distribution)
-      this.sizes[i] = powerLawSize(1.8, 2.5);
+      // Size from stake — higher stake = bigger star
+      this.sizes[i] = stakeToSize(v.stake, 2500, 100000);
 
       // Brightness from rating (scaled slightly — bloom adds glow)
       this.brightnesses[i] = ratingToBrightness(v.rating) * 0.8;
+
+      // Store base brightness for breathing modulation
+      this.baseBrightnesses[i] = this.brightnesses[i];
 
       // Random phase for twinkle
       this.phases[i] = rng.next();
@@ -213,6 +218,7 @@ export class ValidatorField {
 
     let positionsDirty = false;
     let pulsesDirty = false;
+    let brightnessDirty = false;
 
     for (let i = 0; i < this.count; i++) {
       const i3 = i * 3;
@@ -231,6 +237,10 @@ export class ValidatorField {
         this.positions[i3 + 1] = cluster.center.y + this.localOffsets[i3 + 1];
         this.positions[i3 + 2] = cluster.center.z + lx * sin + lz * cos;
         positionsDirty = true;
+
+        // Apply per-shard breathing to brightness
+        this.brightnesses[i] = this.baseBrightnesses[i] * cluster.breathIntensity;
+        brightnessDirty = true;
       }
 
       // Decay proposer pulse
@@ -246,6 +256,9 @@ export class ValidatorField {
     }
     if (pulsesDirty) {
       (this.geometry.getAttribute('aProposerPulse') as THREE.BufferAttribute).needsUpdate = true;
+    }
+    if (brightnessDirty) {
+      (this.geometry.getAttribute('aBrightness') as THREE.BufferAttribute).needsUpdate = true;
     }
   }
 

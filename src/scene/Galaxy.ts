@@ -15,6 +15,7 @@ import { MockDataGenerator } from '../data/MockData';
 import { SimulationEngine } from '../data/SimulationEngine';
 import { HUD } from '../interaction/HUD';
 import { ValidatorRaycaster } from '../interaction/Raycaster';
+import { InfoOverlay } from '../interaction/InfoOverlay';
 
 import {
   BG_COLOR,
@@ -57,6 +58,7 @@ export class Galaxy {
   private simulation: SimulationEngine;
   private hud: HUD;
   private raycaster: ValidatorRaycaster;
+  private infoOverlay: InfoOverlay;
 
   // Post-processing passes needing per-frame/resize updates
   private filmGrainPass: ShaderPass;
@@ -141,12 +143,21 @@ export class Galaxy {
     );
 
     this.raycaster.onValidatorClick((validator) => {
-      // Zoom camera toward the clicked validator's position
       const pos = this.validatorField.getPositionForBls(validator.bls);
       if (pos) {
         this.cameraController.zoomTo(pos);
       }
     });
+
+    // --- Info overlay (shard labels, tx feed) ---
+    this.infoOverlay = new InfoOverlay(camera);
+    // Set shard node counts
+    const shardCounts = new Map<number, number>();
+    const validators = this.mockData.getValidators();
+    for (const v of validators) {
+      shardCounts.set(v.shard, (shardCounts.get(v.shard) ?? 0) + 1);
+    }
+    this.infoOverlay.setShardCounts(shardCounts);
 
     // --- Post-processing ---
     this.composer = new EffectComposer(this.renderer);
@@ -236,6 +247,12 @@ export class Galaxy {
       onlineCount: this.mockData.getOnlineCount(),
       activeParticles: this.txPool.getActiveCount(),
     });
+
+    // Update info overlay (shard labels + tx feed)
+    this.infoOverlay.updateLabelPositions();
+    if (this.infoOverlay.isActive()) {
+      this.infoOverlay.updateTransactionFeed(this.simulation.getRecentTransactions());
+    }
 
     // Film grain needs time
     this.filmGrainPass.uniforms.uTime.value += dt;

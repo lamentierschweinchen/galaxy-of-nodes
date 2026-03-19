@@ -1,4 +1,3 @@
-import * as THREE from 'three';
 import { MockDataGenerator, MockBlock, MockTransaction } from './MockData';
 import { TransactionPool } from '../particles/TransactionPool';
 import { ValidatorField } from '../scene/ValidatorField';
@@ -6,9 +5,9 @@ import { MetachainCore } from '../scene/MetachainCore';
 import { METACHAIN_SHARD_ID } from '../utils/config';
 
 /**
- * Drives the mock simulation: generates blocks every 6s per shard,
- * spawns transaction particles, triggers proposer pulses,
- * and fires supernova bursts every 30s.
+ * Drives the mock simulation at 1,000-10,000 TPS.
+ * Not every transaction becomes a particle — we sample a visual subset.
+ * The TPS counter reflects the "real" simulated throughput.
  */
 export class SimulationEngine {
   private mockData: MockDataGenerator;
@@ -20,26 +19,31 @@ export class SimulationEngine {
   private txTimer = 0;
   private burstTimer = 0;
 
-  // Timing constants
-  private blockInterval = 6.0;     // seconds per block round
-  private txSpawnInterval = 0.2;   // spawn txs every 200ms
-  private burstInterval = 30.0;    // supernova burst every 30s
+  // Timing
+  private blockInterval = 6.0;
+  private txSpawnInterval = 0.033; // spawn visual particles every ~33ms (30fps)
+  private burstInterval = 30.0;
 
-  // Per-shard block timers (offset so they don't all fire at once)
+  // Per-shard block timers (staggered)
   private shardBlockTimers: Map<number, number> = new Map();
 
-  // Stats for HUD
-  private tpsAccumulator = 0;
-  private tpsWindow: number[] = [];
+  // TPS simulation: we simulate high TPS but only visualize a sample
+  private simulatedTps = 3000; // baseline TPS (oscillates 1k-10k)
+  private tpsPhase = 0;
   private currentTps = 0;
+  private txAccumulatedThisSecond = 0;
+  private secondTimer = 0;
 
-  // Staggered burst queue (avoids setTimeout)
-  private burstQueue: import('./MockData').MockTransaction[] = [];
+  // Burst queue
+  private burstQueue: MockTransaction[] = [];
   private burstSpawnTimer = 0;
+
+  // Transaction log for feed display (sampled)
+  private recentTransactions: MockTransaction[] = [];
+  private maxRecentTxs = 50;
 
   // Callbacks
   onNewBlock?: (block: MockBlock) => void;
-  onStatsUpdate?: (stats: { round: number; epoch: number; tps: number; onlineCount: number }) => void;
 
   constructor(
     mockData: MockDataGenerator,
@@ -52,7 +56,7 @@ export class SimulationEngine {
     this.validatorField = validatorField;
     this.metachainCore = metachainCore;
 
-    // Offset shard block timers so they stagger
+    // Stagger shard block timers
     this.shardBlockTimers.set(0, 0);
     this.shardBlockTimers.set(1, 1.5);
     this.shardBlockTimers.set(2, 3.0);
@@ -60,6 +64,12 @@ export class SimulationEngine {
   }
 
   update(dt: number): void {
+    // --- Oscillating TPS (1,000 - 10,000, sine wave with noise) ---
+    this.tpsPhase += dt * 0.15;
+    const baseTps = 3000 + 2000 * Math.sin(this.tpsPhase);
+    const noiseTps = baseTps + (Math.random() - 0.5) * 1000;
+    this.simulatedTps = Math.max(1000, Math.min(10000, noiseTps));
+
     // --- Block generation (per-shard, staggered) ---
     for (const [shard, timer] of this.shardBlockTimers) {
       const newTimer = timer + dt;
@@ -71,11 +81,39 @@ export class SimulationEngine {
       }
     }
 
-    // --- Transaction spawning (continuous drip) ---
+    // --- Visual particle spawning (sampled from simulated TPS) ---
+    // At 3000 TPS, we want ~40-60 visual particles per second
+    // Scale particle spawn rate with TPS but cap visual density
     this.txTimer += dt;
     if (this.txTimer >= this.txSpawnInterval) {
       this.txTimer -= this.txSpawnInterval;
-      this.spawnTransactionBatch(8 + Math.floor(Math.random() * 5)); // 8-12 per tick
+
+      // Visual particles: proportional to TPS but capped
+      const visualParticlesPerTick = Math.floor(
+        2 + (this.simulatedTps / 1000) * 1.5 + Math.random() * 2,
+      );
+      const txs = this.mockData.generateTransactions(visualParticlesPerTick);
+
+      for (const tx of txs) {
+        this.spawnTxParticle(tx);
+      }
+
+      // Sample some for the feed
+      if (txs.length > 0 && Math.random() < 0.3) {
+        this.addToRecentTxs(txs[0]);
+      }
+
+      // Count toward simulated TPS (the "real" number)
+      const simulatedThisTick = Math.floor(this.simulatedTps * this.txSpawnInterval);
+      this.txAccumulatedThisSecond += simulatedThisTick;
+    }
+
+    // --- TPS calculation (per-second) ---
+    this.secondTimer += dt;
+    if (this.secondTimer >= 1.0) {
+      this.secondTimer -= 1.0;
+      this.currentTps = this.txAccumulatedThisSecond;
+      this.txAccumulatedThisSecond = 0;
     }
 
     // --- Supernova burst ---
@@ -85,43 +123,23 @@ export class SimulationEngine {
       this.supernovaBurst();
     }
 
-    // --- Drain burst queue (staggered over frames) ---
+    // --- Drain burst queue ---
     if (this.burstQueue.length > 0) {
       this.burstSpawnTimer += dt;
-      if (this.burstSpawnTimer >= 0.05) { // spawn batch every 50ms
+      if (this.burstSpawnTimer >= 0.03) {
         this.burstSpawnTimer = 0;
-        const batch = this.burstQueue.splice(0, 20);
-        this.tpsAccumulator += batch.length;
+        const batch = this.burstQueue.splice(0, 30);
         for (const tx of batch) {
           this.spawnTxParticle(tx);
         }
       }
     }
-
-    // --- TPS calculation ---
-    this.tpsWindow.push(this.tpsAccumulator);
-    this.tpsAccumulator = 0;
-    if (this.tpsWindow.length > 30) this.tpsWindow.shift(); // 30-tick rolling window
-    const totalTxs = this.tpsWindow.reduce((a, b) => a + b, 0);
-    const windowSeconds = this.tpsWindow.length * this.txSpawnInterval;
-    this.currentTps = windowSeconds > 0 ? totalTxs / windowSeconds : 0;
-
-    // --- Stats callback ---
-    this.onStatsUpdate?.({
-      round: this.mockData.getRoundCounter(),
-      epoch: this.mockData.getEpoch(),
-      tps: this.currentTps,
-      onlineCount: this.mockData.getOnlineCount(),
-    });
   }
 
   private produceBlock(shard: number): void {
     const block = this.mockData.generateBlock(shard);
-
-    // Pulse the proposer star
     this.validatorField.pulseProposer(block.proposer);
 
-    // Metachain block triggers core pulse
     if (shard === METACHAIN_SHARD_ID) {
       this.metachainCore.triggerPulse();
     }
@@ -129,35 +147,22 @@ export class SimulationEngine {
     this.onNewBlock?.(block);
   }
 
-  private spawnTransactionBatch(count: number): void {
-    const txs = this.mockData.generateTransactions(count);
-    this.tpsAccumulator += txs.length;
-
-    for (const tx of txs) {
-      this.spawnTxParticle(tx);
-    }
-  }
-
   private spawnTxParticle(tx: MockTransaction): void {
-    // Get positions from validator field
     const senderPos = this.validatorField.getPositionForBls(tx.sender);
     const receiverPos = this.validatorField.getPositionForBls(tx.receiver);
 
-    if (!senderPos || !receiverPos) {
-      // Fallback: use shard center positions
-      return;
-    }
+    if (!senderPos || !receiverPos) return;
 
     const isCrossShard = tx.senderShard !== tx.receiverShard;
 
-    // Value → brightness (log scale)
+    // Value → brightness
     const valueEgld = parseFloat(tx.value) / 1e18;
     let valueBrightness = 0.3;
     if (valueEgld > 0) {
       valueBrightness = Math.min(1.0, 0.3 + Math.log10(valueEgld + 1) * 0.15);
     }
 
-    // High-value cross-shard gets comet treatment
+    // Cross-shard high-value gets comet treatment
     if (isCrossShard && valueBrightness > 0.6) {
       this.txPool.spawnComet(senderPos, receiverPos, tx.type, valueBrightness);
     } else {
@@ -166,21 +171,39 @@ export class SimulationEngine {
   }
 
   private supernovaBurst(): void {
+    // Generate a massive burst
     const txs = this.mockData.generateSupernovaBurst();
-
-    // Queue for staggered spawning over multiple frames (no setTimeout)
     this.burstQueue.push(...txs);
     this.burstSpawnTimer = 0;
 
-    // Trigger all shard proposer pulses for dramatic effect
+    // Trigger all shard proposer pulses
     for (const shard of [0, 1, 2, METACHAIN_SHARD_ID]) {
       const v = this.mockData.getRandomValidatorInShard(shard);
       this.validatorField.pulseProposer(v.bls);
     }
     this.metachainCore.triggerPulse();
+
+    // Spike the TPS counter during burst
+    this.txAccumulatedThisSecond += 5000;
+
+    // Add burst txs to feed
+    for (let i = 0; i < Math.min(5, txs.length); i++) {
+      this.addToRecentTxs(txs[i]);
+    }
+  }
+
+  private addToRecentTxs(tx: MockTransaction): void {
+    this.recentTransactions.unshift(tx);
+    if (this.recentTransactions.length > this.maxRecentTxs) {
+      this.recentTransactions.length = this.maxRecentTxs;
+    }
   }
 
   getTps(): number {
     return this.currentTps;
+  }
+
+  getRecentTransactions(): MockTransaction[] {
+    return this.recentTransactions;
   }
 }

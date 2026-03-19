@@ -112,7 +112,7 @@ export class HUD {
       <div class="tps-bar-container">
         <div class="tps-bar-fill" id="hud-tps-fill"></div>
       </div>
-      <span style="font-size: 10px; opacity: 0.5;">network energy</span>
+      <span id="hud-tps-label" style="font-size: 10px; opacity: 0.5;">0 tx/s</span>
     `;
     this.container.appendChild(bottomCenter);
 
@@ -137,8 +137,17 @@ export class HUD {
     this.validatorsEl.textContent = stats.onlineCount.toLocaleString();
     this.activeParticlesEl.textContent = stats.activeParticles.toString();
 
-    // TPS bar: map 0-500 TPS to 0-100% width
-    const tpsPercent = Math.min(100, (stats.tps / 500) * 100);
+    // TPS bar: map 0-10000 TPS to 0-100% width
+    const tpsPercent = Math.min(100, (stats.tps / 10000) * 100);
     this.tpsBarFill.style.width = `${tpsPercent}%`;
+
+    // TPS label with formatted number
+    const tpsLabel = document.getElementById('hud-tps-label');
+    if (tpsLabel) {
+      const formatted = stats.tps >= 1000
+        ? `${(stats.tps / 1000).toFixed(1)}k tx/s`
+        : `${Math.round(stats.tps)} tx/s`;
+      tpsLabel.textContent = formatted;
+    }
   }
 }
