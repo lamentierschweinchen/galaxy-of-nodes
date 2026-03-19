@@ -36,6 +36,7 @@ export interface NetworkStats {
   roundsPerEpoch: number;
   transactions: number;
   accounts: number;
+  tps?: number;
 }
 
 export interface ValidatorInfo extends ValidatorData {

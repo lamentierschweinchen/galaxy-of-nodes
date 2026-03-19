@@ -27,6 +27,16 @@ export const CAMERA_INACTIVITY_RESUME_MS = 15_000;
 // API (Phase 3+)
 export const API_BASE = 'https://api.multiversx.com';
 export const POLL_INTERVAL_MS = 6_000;
+export const DEFAULT_REFRESH_INTERVAL_MS = 6_000;
+
+export type NetworkId = 'mainnet' | 'battle-of-nodes' | 'devnet' | 'testnet';
+
+export const NETWORK_API_BASES: Record<NetworkId, string> = {
+  mainnet: 'https://api.multiversx.com',
+  'battle-of-nodes': 'https://api.battleofnodes.com',
+  devnet: 'https://devnet-api.multiversx.com',
+  testnet: 'https://testnet-api.multiversx.com',
+};
 
 // Bloom
 export const BLOOM_STRENGTH = 0.8;

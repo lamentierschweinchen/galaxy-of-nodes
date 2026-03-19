@@ -1,3 +1,5 @@
+import type { NetworkId } from '../utils/config';
+
 /**
  * Minimal HUD overlay — CSS DOM elements positioned over the WebGL canvas.
  * No dashboard aesthetics. Semi-transparent, monospace, minimal.
@@ -10,6 +12,11 @@ export class HUD {
   private tpsBarEl: HTMLElement;
   private tpsBarFill: HTMLElement;
   private activeParticlesEl: HTMLElement;
+  private networkSelect: HTMLSelectElement;
+  private refreshIntervalInput: HTMLInputElement;
+
+  private networkChangeCallback?: (network: NetworkId) => void;
+  private refreshIntervalChangeCallback?: (intervalMs: number) => void;
 
   constructor() {
     this.container = document.getElementById('hud')!;
@@ -35,6 +42,7 @@ export class HUD {
         position: absolute;
         top: 24px;
         left: 28px;
+        pointer-events: auto;
       }
       .hud-top-right {
         position: absolute;
@@ -72,6 +80,38 @@ export class HUD {
         align-items: baseline;
         margin-bottom: 4px;
       }
+      .hud-controls {
+        margin-top: 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .hud-control-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .hud-control-input {
+        font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', 'Cascadia Code', monospace;
+        font-size: 10px;
+        color: rgba(255, 255, 255, 0.85);
+        background: rgba(5, 5, 16, 0.6);
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        border-radius: 4px;
+        outline: none;
+        padding: 2px 6px;
+        min-height: 22px;
+        pointer-events: auto;
+      }
+      .hud-control-input:focus {
+        border-color: rgba(255, 255, 255, 0.4);
+      }
+      .hud-control-select {
+        width: 190px;
+      }
+      .hud-control-number {
+        width: 70px;
+      }
     `;
     this.container.appendChild(style);
 
@@ -86,6 +126,21 @@ export class HUD {
       <div class="hud-row">
         <span>Epoch</span>
         <span class="hud-value" id="hud-epoch">0</span>
+      </div>
+      <div class="hud-controls">
+        <div class="hud-control-row">
+          <span style="font-size:10px;opacity:0.55;">Network</span>
+          <select class="hud-control-input hud-control-select" id="hud-network-select">
+            <option value="mainnet">Mainnet</option>
+            <option value="battle-of-nodes">Battle of Nodes</option>
+            <option value="devnet">Devnet</option>
+            <option value="testnet">Testnet</option>
+          </select>
+        </div>
+        <div class="hud-control-row">
+          <span style="font-size:10px;opacity:0.55;">Refresh (s)</span>
+          <input class="hud-control-input hud-control-number" id="hud-refresh-input" type="number" min="1" max="6" step="1" value="6" />
+        </div>
       </div>
     `;
     this.container.appendChild(topLeft);
@@ -123,6 +178,47 @@ export class HUD {
     this.tpsBarFill = document.getElementById('hud-tps-fill')!;
     this.activeParticlesEl = document.getElementById('hud-total-tx')!;
     this.tpsBarEl = bottomCenter;
+
+    this.networkSelect = document.getElementById('hud-network-select') as HTMLSelectElement;
+    this.refreshIntervalInput = document.getElementById('hud-refresh-input') as HTMLInputElement;
+
+    this.networkSelect.addEventListener('change', () => {
+      this.networkChangeCallback?.(this.networkSelect.value as NetworkId);
+    });
+
+    this.refreshIntervalInput.addEventListener('change', () => {
+      const seconds = Number(this.refreshIntervalInput.value);
+      if (!Number.isFinite(seconds) || seconds < 1) {
+        this.refreshIntervalInput.value = '6';
+        this.refreshIntervalChangeCallback?.(6_000);
+        return;
+      }
+
+      const normalized = Math.max(1, Math.min(6, Math.round(seconds)));
+      this.refreshIntervalInput.value = String(normalized);
+      this.refreshIntervalChangeCallback?.(normalized * 1000);
+    });
+
+    this.refreshIntervalInput.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter') return;
+      this.refreshIntervalInput.dispatchEvent(new Event('change'));
+    });
+  }
+
+  onNetworkChange(callback: (network: NetworkId) => void): void {
+    this.networkChangeCallback = callback;
+  }
+
+  onRefreshIntervalChange(callback: (intervalMs: number) => void): void {
+    this.refreshIntervalChangeCallback = callback;
+  }
+
+  setNetwork(network: NetworkId): void {
+    this.networkSelect.value = network;
+  }
+
+  setRefreshIntervalMs(intervalMs: number): void {
+    this.refreshIntervalInput.value = String(Math.max(1, Math.min(6, Math.round(intervalMs / 1000))));
   }
 
   updateStats(stats: {

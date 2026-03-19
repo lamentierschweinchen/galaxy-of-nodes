@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { MockTransaction } from '../data/MockData';
+import type { TransactionData } from '../data/DataSource';
 import { SHARD_POSITIONS, METACHAIN_SHARD_ID } from '../utils/config';
 import { SHARD_BASE_COLORS } from '../utils/colors';
 
@@ -176,7 +176,7 @@ export class InfoOverlay {
   private lastFeedUpdate = 0;
   private feedUpdateInterval = 1.5; // update feed every 1.5s (not every frame)
 
-  updateTransactionFeed(txs: MockTransaction[], dt: number): void {
+  updateTransactionFeed(txs: TransactionData[], dt: number): void {
     if (!this.active || txs.length === 0) return;
 
     this.lastFeedUpdate += dt;
@@ -231,7 +231,7 @@ export class InfoOverlay {
     }
   }
 
-  private humanReadableTxType(tx: MockTransaction): string {
+  private humanReadableTxType(tx: TransactionData): string {
     if (tx.function) {
       // Capitalize and space-separate camelCase
       const name = tx.function

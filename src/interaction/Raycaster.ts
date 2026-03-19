@@ -1,7 +1,11 @@
 import * as THREE from 'three';
 import { ValidatorField } from '../scene/ValidatorField';
-import { MockDataGenerator, MockValidator } from '../data/MockData';
+import type { ValidatorInfo } from '../data/DataSource';
 import { Tooltip } from './Tooltip';
+
+interface ValidatorLookup {
+  getValidator(index: number): ValidatorInfo | undefined;
+}
 
 /**
  * Raycaster for hover detection on validator stars.
@@ -12,18 +16,18 @@ export class ValidatorRaycaster {
   private mouse: THREE.Vector2;
   private camera: THREE.PerspectiveCamera;
   private validatorField: ValidatorField;
-  private mockData: MockDataGenerator;
+  private dataProvider: ValidatorLookup;
   private tooltip: Tooltip;
   private canvas: HTMLCanvasElement;
 
   private hoveredIndex: number | null = null;
-  private onClickCallback?: (validator: MockValidator) => void;
+  private onClickCallback?: (validator: ValidatorInfo) => void;
 
   constructor(
     camera: THREE.PerspectiveCamera,
     canvas: HTMLCanvasElement,
     validatorField: ValidatorField,
-    mockData: MockDataGenerator,
+    dataProvider: ValidatorLookup,
   ) {
     this.raycaster = new THREE.Raycaster();
     this.raycaster.params.Points!.threshold = 1.5;
@@ -31,7 +35,7 @@ export class ValidatorRaycaster {
     this.camera = camera;
     this.canvas = canvas;
     this.validatorField = validatorField;
-    this.mockData = mockData;
+    this.dataProvider = dataProvider;
     this.tooltip = new Tooltip();
 
     canvas.addEventListener('mousemove', this.onMouseMove);
@@ -51,14 +55,14 @@ export class ValidatorRaycaster {
       const index = intersects[0].index!;
       if (index !== this.hoveredIndex) {
         this.hoveredIndex = index;
-        const validator = this.mockData.getValidator(index);
+        const validator = this.dataProvider.getValidator(index);
         if (validator) {
           this.tooltip.show(event.clientX, event.clientY, validator);
           this.canvas.style.cursor = 'pointer';
         }
       } else {
         // Update tooltip position on same validator
-        const validator = this.mockData.getValidator(index);
+        const validator = this.dataProvider.getValidator(index);
         if (validator) {
           this.tooltip.show(event.clientX, event.clientY, validator);
         }
@@ -72,7 +76,7 @@ export class ValidatorRaycaster {
 
   private onClick = (_event: MouseEvent): void => {
     if (this.hoveredIndex !== null) {
-      const validator = this.mockData.getValidator(this.hoveredIndex);
+      const validator = this.dataProvider.getValidator(this.hoveredIndex);
       if (validator) {
         this.onClickCallback?.(validator);
       }
@@ -85,8 +89,12 @@ export class ValidatorRaycaster {
     this.canvas.style.cursor = 'default';
   };
 
-  onValidatorClick(callback: (validator: MockValidator) => void): void {
+  onValidatorClick(callback: (validator: ValidatorInfo) => void): void {
     this.onClickCallback = callback;
+  }
+
+  setDataProvider(dataProvider: ValidatorLookup): void {
+    this.dataProvider = dataProvider;
   }
 
   dispose(): void {
