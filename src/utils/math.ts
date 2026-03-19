@@ -54,20 +54,16 @@ export function crossShardBezier(
   t: number,
   out: THREE.Vector3,
 ): void {
-  // Control points: pulled toward origin (metachain), arced upward dramatically
-  // The arc height scales with the distance between source and destination
-  const dx = end.x - start.x;
-  const dz = end.z - start.z;
-  const dist = Math.sqrt(dx * dx + dz * dz);
-  const arcHeight = dist * 0.35; // 35% of distance as arc height
+  // Control points: pulled toward origin (metachain notarization).
+  // Nearly straight path — just a subtle inward pull toward the metachain
+  // to show the routing, not a dramatic arc. These are fast, direct paths.
+  const p1x = start.x * 0.55; // pull 45% toward origin
+  const p1y = (start.y + end.y) * 0.5 + 2; // barely above the midline
+  const p1z = start.z * 0.55;
 
-  const p1x = start.x * 0.4; // pull 60% toward origin
-  const p1y = start.y + arcHeight;
-  const p1z = start.z * 0.4;
-
-  const p2x = end.x * 0.4;
-  const p2y = end.y + arcHeight;
-  const p2z = end.z * 0.4;
+  const p2x = end.x * 0.55;
+  const p2y = (start.y + end.y) * 0.5 + 2;
+  const p2z = end.z * 0.55;
 
   const omt = 1 - t;
   const omt2 = omt * omt;
