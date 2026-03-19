@@ -1,7 +1,11 @@
 import { Galaxy } from './scene/Galaxy';
+import { AudioController } from './interaction/AudioController';
 
 const container = document.getElementById('app')!;
 const galaxy = new Galaxy(container);
+
+// Audio — sound toggle button, starts muted
+new AudioController();
 
 // Render loop
 let lastTime = performance.now();
