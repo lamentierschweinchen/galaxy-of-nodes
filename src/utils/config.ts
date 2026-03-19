@@ -14,8 +14,8 @@ export const METACHAIN_SHARD_ID = 4294967295;
 export const VALIDATOR_CLUSTER_RADIUS = 15;
 export const BACKGROUND_STAR_COUNT = 80_000;
 export const DUST_PARTICLE_COUNT = 3_000;
-export const MOCK_VALIDATOR_COUNT = 3_200;
-export const VALIDATORS_PER_SHARD = 800;
+export const MOCK_VALIDATOR_COUNT = 3_221;
+export const VALIDATORS_PER_SHARD = 720;
 
 // Camera
 export const CAMERA_ORBIT_RADIUS = 100;

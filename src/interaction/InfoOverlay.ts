@@ -173,53 +173,78 @@ export class InfoOverlay {
     }
   }
 
-  updateTransactionFeed(txs: MockTransaction[]): void {
-    if (!this.active) return;
+  private lastFeedUpdate = 0;
+  private feedUpdateInterval = 1.5; // update feed every 1.5s (not every frame)
 
-    // Only update if we have new txs to show
-    const toShow = txs.slice(0, 12);
+  updateTransactionFeed(txs: MockTransaction[], dt: number): void {
+    if (!this.active || txs.length === 0) return;
 
-    // Clear and rebuild (simple approach — runs rarely)
+    this.lastFeedUpdate += dt;
+    if (this.lastFeedUpdate < this.feedUpdateInterval) return;
+    this.lastFeedUpdate = 0;
+
+    const toShow = txs.slice(0, 10);
+
     this.txFeedList.innerHTML = '';
 
-    for (const tx of toShow) {
-      const row = document.createElement('div');
+    for (let idx = 0; idx < toShow.length; idx++) {
+      const tx = toShow[idx];
       const isCross = tx.senderShard !== tx.receiverShard;
-      const valueEgld = parseFloat(tx.value) / 1e18;
-      const valueStr = valueEgld >= 1000
-        ? `${(valueEgld / 1000).toFixed(1)}k`
-        : valueEgld >= 1
-          ? valueEgld.toFixed(2)
-          : valueEgld.toFixed(4);
 
+      // Human-readable function name
+      const funcName = this.humanReadableTxType(tx);
+
+      // Shard routing
+      const shardFrom = tx.senderShard === METACHAIN_SHARD_ID ? 'Meta' : `Shard ${tx.senderShard}`;
+      const shardTo = tx.receiverShard === METACHAIN_SHARD_ID ? 'Meta' : `Shard ${tx.receiverShard}`;
+      const routing = isCross
+        ? `${shardFrom} → ${shardTo}`
+        : shardFrom;
+
+      // Color by type
       const typeColor = tx.type === 'scCall' ? '#4ecdc4'
         : tx.type === 'esdtTransfer' ? '#c4a0ff'
-          : 'rgba(255,255,255,0.5)';
+          : 'rgba(255,255,255,0.6)';
 
-      const shardArrow = isCross
-        ? `<span style="opacity:0.3">S${tx.senderShard}</span> <span style="color:rgba(255,255,255,0.2)">→</span> <span style="opacity:0.3">S${tx.receiverShard}</span>`
-        : `<span style="opacity:0.3">S${tx.senderShard}</span>`;
-
+      const row = document.createElement('div');
       row.style.cssText = `
         font-family: 'SF Mono', 'Fira Code', monospace;
         font-size: 10px;
-        color: rgba(255, 255, 255, 0.45);
+        color: rgba(255, 255, 255, 0.4);
         display: flex;
         justify-content: flex-end;
         align-items: center;
-        gap: 8px;
-        padding: 2px 0;
+        gap: 10px;
+        padding: 3px 0;
         opacity: 0;
         animation: txFadeIn 0.3s ease forwards;
+        animation-delay: ${idx * 0.05}s;
+        border-bottom: 1px solid rgba(255,255,255,0.03);
       `;
 
       row.innerHTML = `
-        <span style="color:${typeColor};font-size:9px;">${tx.function ?? tx.type}</span>
-        <span style="color:rgba(255,255,255,0.6);">${valueStr}</span>
-        <span style="font-size:9px;">${shardArrow}</span>
+        <span style="color:${typeColor};">${funcName}</span>
+        <span style="color:rgba(255,255,255,0.25);font-size:9px;">${routing}</span>
       `;
 
       this.txFeedList.appendChild(row);
+    }
+  }
+
+  private humanReadableTxType(tx: MockTransaction): string {
+    if (tx.function) {
+      // Capitalize and space-separate camelCase
+      const name = tx.function
+        .replace(/([A-Z])/g, ' $1')
+        .replace(/^./, (s) => s.toUpperCase())
+        .trim();
+      return name;
+    }
+    switch (tx.type) {
+      case 'transfer': return 'Move Balance';
+      case 'esdtTransfer': return 'ESDT Transfer';
+      case 'scCall': return 'SC Call';
+      default: return 'Transfer';
     }
   }
 

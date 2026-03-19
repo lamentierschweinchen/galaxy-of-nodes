@@ -99,8 +99,8 @@ export class HUD {
         <span>validators</span>
       </div>
       <div class="hud-row" style="justify-content: flex-end;">
-        <span class="hud-value" id="hud-particles">0</span>
-        <span>active tx</span>
+        <span class="hud-value" id="hud-total-tx">0</span>
+        <span>transactions</span>
       </div>
     `;
     this.container.appendChild(topRight);
@@ -112,7 +112,7 @@ export class HUD {
       <div class="tps-bar-container">
         <div class="tps-bar-fill" id="hud-tps-fill"></div>
       </div>
-      <span id="hud-tps-label" style="font-size: 10px; opacity: 0.5;">0 tx/s</span>
+      <span id="hud-tps-label" style="font-size: 10px; opacity: 0.5;">Network Activity</span>
     `;
     this.container.appendChild(bottomCenter);
 
@@ -121,7 +121,7 @@ export class HUD {
     this.epochEl = document.getElementById('hud-epoch')!;
     this.validatorsEl = document.getElementById('hud-validators')!;
     this.tpsBarFill = document.getElementById('hud-tps-fill')!;
-    this.activeParticlesEl = document.getElementById('hud-particles')!;
+    this.activeParticlesEl = document.getElementById('hud-total-tx')!;
     this.tpsBarEl = bottomCenter;
   }
 
@@ -130,24 +130,37 @@ export class HUD {
     epoch: number;
     tps: number;
     onlineCount: number;
-    activeParticles: number;
+    totalTransactions: number;
   }): void {
     this.roundEl.textContent = stats.round.toLocaleString();
     this.epochEl.textContent = stats.epoch.toLocaleString();
     this.validatorsEl.textContent = stats.onlineCount.toLocaleString();
-    this.activeParticlesEl.textContent = stats.activeParticles.toString();
+
+    // Format total transactions with K/M suffixes
+    const total = stats.totalTransactions;
+    if (total >= 1_000_000) {
+      this.activeParticlesEl.textContent = `${(total / 1_000_000).toFixed(1)}M`;
+    } else if (total >= 1000) {
+      this.activeParticlesEl.textContent = `${(total / 1000).toFixed(1)}K`;
+    } else {
+      this.activeParticlesEl.textContent = total.toLocaleString();
+    }
 
     // TPS bar: map 0-10000 TPS to 0-100% width
     const tpsPercent = Math.min(100, (stats.tps / 10000) * 100);
     this.tpsBarFill.style.width = `${tpsPercent}%`;
 
-    // TPS label with formatted number
+    // TPS label
     const tpsLabel = document.getElementById('hud-tps-label');
     if (tpsLabel) {
-      const formatted = stats.tps >= 1000
-        ? `${(stats.tps / 1000).toFixed(1)}k tx/s`
-        : `${Math.round(stats.tps)} tx/s`;
-      tpsLabel.textContent = formatted;
+      if (stats.tps > 0) {
+        const formatted = stats.tps >= 1000
+          ? `${(stats.tps / 1000).toFixed(1)}K TPS`
+          : `${Math.round(stats.tps)} TPS`;
+        tpsLabel.textContent = formatted;
+      } else {
+        tpsLabel.textContent = 'Network Activity';
+      }
     }
   }
 }

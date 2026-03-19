@@ -33,6 +33,7 @@ export class SimulationEngine {
   private currentTps = 0;
   private txAccumulatedThisSecond = 0;
   private secondTimer = 0;
+  private totalTransactions = 0;
 
   // Burst queue
   private burstQueue: MockTransaction[] = [];
@@ -113,6 +114,7 @@ export class SimulationEngine {
     if (this.secondTimer >= 1.0) {
       this.secondTimer -= 1.0;
       this.currentTps = this.txAccumulatedThisSecond;
+      this.totalTransactions += this.txAccumulatedThisSecond;
       this.txAccumulatedThisSecond = 0;
     }
 
@@ -201,6 +203,10 @@ export class SimulationEngine {
 
   getTps(): number {
     return this.currentTps;
+  }
+
+  getTotalTransactions(): number {
+    return this.totalTransactions;
   }
 
   getRecentTransactions(): MockTransaction[] {

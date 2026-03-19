@@ -245,14 +245,12 @@ export class Galaxy {
       epoch: this.mockData.getEpoch(),
       tps: this.simulation.getTps(),
       onlineCount: this.mockData.getOnlineCount(),
-      activeParticles: this.txPool.getActiveCount(),
+      totalTransactions: this.simulation.getTotalTransactions(),
     });
 
     // Update info overlay (shard labels + tx feed)
     this.infoOverlay.updateLabelPositions();
-    if (this.infoOverlay.isActive()) {
-      this.infoOverlay.updateTransactionFeed(this.simulation.getRecentTransactions());
-    }
+    this.infoOverlay.updateTransactionFeed(this.simulation.getRecentTransactions(), dt);
 
     // Film grain needs time
     this.filmGrainPass.uniforms.uTime.value += dt;

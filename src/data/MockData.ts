@@ -112,22 +112,28 @@ export class MockDataGenerator {
   }
 
   private generateValidators(): void {
-    const shards = [0, 1, 2, METACHAIN_SHARD_ID];
+    // Real distribution: 720 eligible per shard (meta, 0, 1, 2) = 2880 + 341 auction = 3221
+    const ELIGIBLE_PER_SHARD = 720;
+    const AUCTION_COUNT = 341;
+    const shardOrder = [METACHAIN_SHARD_ID, 0, 1, 2]; // meta first, then shards
+    const totalTarget = ELIGIBLE_PER_SHARD * 4 + AUCTION_COUNT; // 3221
     let validatorIndex = 0;
 
     for (const provider of STAKING_PROVIDERS) {
       const count =
         provider.name === 'Independent'
-          ? Math.max(0, 3200 - validatorIndex) // fill remainder
+          ? Math.max(0, totalTarget - validatorIndex)
           : provider.count;
 
-      for (let i = 0; i < count && validatorIndex < 3200; i++) {
-        const shard = shards[validatorIndex % 4];
-        // Metachain gets fewer validators (every 4th goes to meta, but skip some)
-        const actualShard =
-          shard === METACHAIN_SHARD_ID && validatorIndex % 8 !== 0
-            ? validatorIndex % 3
-            : shard;
+      for (let i = 0; i < count && validatorIndex < totalTarget; i++) {
+        // Distribute evenly across shards: first 2880 are eligible (720 each), rest are auction
+        let actualShard: number;
+        if (validatorIndex < ELIGIBLE_PER_SHARD * 4) {
+          actualShard = shardOrder[Math.floor(validatorIndex / ELIGIBLE_PER_SHARD)];
+        } else {
+          // Auction validators spread across shards 0-2
+          actualShard = validatorIndex % 3;
+        }
 
         const seed = `${provider.name}_${i}_${validatorIndex}`;
         const rng = seededSequence(seed);
