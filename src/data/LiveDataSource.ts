@@ -318,22 +318,14 @@ export class LiveDataSource implements DataSource {
   }
 
   private computeRoundFromStats(stats: NetworkStats): number {
-    const roundsPerEpoch = Number(stats.roundsPerEpoch ?? 0);
     const roundsPassed = Number(stats.roundsPassed ?? 0);
 
-    if (!Number.isFinite(roundsPerEpoch) || !Number.isFinite(roundsPassed)) {
+    if (!Number.isFinite(roundsPassed)) {
       return 0;
     }
 
-    const safeRoundsPerEpoch = Math.max(0, Math.floor(roundsPerEpoch));
     const safeRoundsPassed = Math.max(0, Math.floor(roundsPassed));
-
-    if (safeRoundsPerEpoch === 0) return 0;
-
-    const passedInEpoch = safeRoundsPassed % safeRoundsPerEpoch;
-    if (passedInEpoch === 0 && safeRoundsPassed > 0) return 0;
-
-    return Math.max(0, safeRoundsPerEpoch - passedInEpoch);
+    return safeRoundsPassed;
   }
 
   private async fetchLatestTransactions(size: number): Promise<TransactionData[]> {
