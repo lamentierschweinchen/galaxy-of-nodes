@@ -14,6 +14,7 @@ interface ApiNode {
   bls?: string;
   shard?: number;
   rating?: number;
+  ratingModifier?: number;
   stake?: string | number;
   online?: boolean;
   name?: string;
@@ -236,7 +237,13 @@ export class LiveDataSource implements DataSource {
       .map((node, index): ValidatorInfo => {
         const bls = String(node.bls);
         const shard = Number.isFinite(node.shard) ? Number(node.shard) : 0;
-        const rating = Number.isFinite(node.rating) ? Number(node.rating) : 0;
+        const hasRating = Number.isFinite(node.rating);
+        const hasRatingModifier = Number.isFinite(node.ratingModifier);
+        const rating = hasRating
+          ? Math.max(0, Math.min(100, Number(node.rating)))
+          : hasRatingModifier
+            ? Math.max(0, Math.min(100, 50 + Number(node.ratingModifier)))
+            : 50;
         const stakeRaw = node.stake ?? '0';
         const stake = typeof stakeRaw === 'number' ? Math.trunc(stakeRaw).toString() : String(stakeRaw);
 

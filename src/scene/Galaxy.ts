@@ -65,7 +65,7 @@ export class Galaxy {
   private infoOverlay: InfoOverlay;
 
   private liveDataSource: LiveDataSource | null = null;
-  private selectedNetwork: NetworkId = 'mainnet';
+  private selectedNetwork: NetworkId = 'battle-of-nodes';
   private refreshIntervalMs = DEFAULT_REFRESH_INTERVAL_MS;
   private dataMode: 'mock' | 'live' = 'mock';
   private liveRecentTransactions: TransactionData[] = [];
