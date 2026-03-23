@@ -11,7 +11,7 @@ import { DustField } from './DustField';
 import { ShardCluster } from './ShardCluster';
 import { CameraController } from '../interaction/CameraController';
 import { TransactionPool } from '../particles/TransactionPool';
-import { MockDataGenerator } from '../data/MockData';
+import type { DataSource } from '../data/DataSource';
 import { SimulationEngine } from '../data/SimulationEngine';
 import { HUD } from '../interaction/HUD';
 import { ValidatorRaycaster } from '../interaction/Raycaster';
@@ -39,6 +39,8 @@ import {
 /**
  * Main scene orchestrator. Creates renderer, camera, post-processing,
  * and all visual + data sub-systems. Call update(dt) and render() each frame.
+ *
+ * Use Galaxy.create() for async initialization (required for live data).
  */
 export class Galaxy {
   private renderer: THREE.WebGLRenderer;
@@ -52,9 +54,8 @@ export class Galaxy {
   private dustField: DustField;
   private clusters: ShardCluster[];
 
-  // Phase 3-6 systems
   private txPool: TransactionPool;
-  private mockData: MockDataGenerator;
+  private dataSource: DataSource;
   private simulation: SimulationEngine;
   private hud: HUD;
   private raycaster: ValidatorRaycaster;
@@ -64,7 +65,17 @@ export class Galaxy {
   private filmGrainPass: ShaderPass;
   private caPass: ShaderPass;
 
-  constructor(container: HTMLElement) {
+  /**
+   * Async factory — initializes data source before constructing the scene.
+   */
+  static async create(container: HTMLElement, dataSource: DataSource, liveMode = false): Promise<Galaxy> {
+    await dataSource.initialize();
+    return new Galaxy(container, dataSource, liveMode);
+  }
+
+  constructor(container: HTMLElement, dataSource: DataSource, liveMode = false) {
+    this.dataSource = dataSource;
+
     const width = container.clientWidth;
     const height = container.clientHeight;
 
@@ -100,14 +111,16 @@ export class Galaxy {
       new ShardCluster(METACHAIN_SHARD_ID),
     ];
 
-    // --- Mock data ---
-    this.mockData = new MockDataGenerator();
-
     // --- Visual sub-systems ---
     this.starfield = new Starfield();
     this.scene.add(this.starfield.points);
 
-    this.validatorField = new ValidatorField(this.mockData.getValidatorData(), this.clusters);
+    // Validators from DataSource (already initialized)
+    const validators = dataSource.getValidators();
+    const validatorData = validators.map(v => ({
+      bls: v.bls, shard: v.shard, rating: v.rating, stake: v.stake, online: v.online,
+    }));
+    this.validatorField = new ValidatorField(validatorData, this.clusters);
     this.scene.add(this.validatorField.points);
 
     this.metachainCore = new MetachainCore();
@@ -121,12 +134,13 @@ export class Galaxy {
     this.txPool = new TransactionPool();
     this.scene.add(this.txPool.points);
 
-    // --- Simulation engine ---
+    // --- Simulation engine (dual-mode) ---
     this.simulation = new SimulationEngine(
-      this.mockData,
+      dataSource,
       this.txPool,
       this.validatorField,
       this.metachainCore,
+      liveMode,
     );
 
     // --- HUD ---
@@ -137,7 +151,7 @@ export class Galaxy {
       camera,
       this.renderer.domElement,
       this.validatorField,
-      this.mockData,
+      dataSource,
     );
 
     this.raycaster.onValidatorClick((validator) => {
@@ -149,13 +163,21 @@ export class Galaxy {
 
     // --- Info overlay (shard labels, tx feed) ---
     this.infoOverlay = new InfoOverlay(camera);
-    // Set shard node counts
-    const shardCounts = new Map<number, number>();
-    const validators = this.mockData.getValidators();
-    for (const v of validators) {
-      shardCounts.set(v.shard, (shardCounts.get(v.shard) ?? 0) + 1);
-    }
-    this.infoOverlay.setShardCounts(shardCounts);
+    this.updateShardCounts();
+
+    // --- Start data source with callbacks ---
+    dataSource.start({
+      onValidatorsLoaded: (newValidators) => {
+        const newData = newValidators.map(v => ({
+          bls: v.bls, shard: v.shard, rating: v.rating, stake: v.stake, online: v.online,
+        }));
+        this.validatorField.setValidators(newData, this.clusters);
+        this.updateShardCounts();
+      },
+      onNewBlock: (block) => this.simulation.onLiveBlock(block),
+      onNewTransactions: (txs) => this.simulation.onLiveTransactions(txs),
+      onStatsUpdate: (stats) => this.simulation.onLiveStats(stats),
+    });
 
     // --- Post-processing ---
     this.composer = new EffectComposer(this.renderer);
@@ -218,6 +240,15 @@ export class Galaxy {
     this.composer.addPass(this.caPass);
   }
 
+  private updateShardCounts(): void {
+    const shardCounts = new Map<number, number>();
+    const validators = this.dataSource.getValidators();
+    for (const v of validators) {
+      shardCounts.set(v.shard, (shardCounts.get(v.shard) ?? 0) + 1);
+    }
+    this.infoOverlay.setShardCounts(shardCounts);
+  }
+
   update(dt: number): void {
     // Update clusters (rotation, breathing)
     for (const cluster of this.clusters) {
@@ -234,15 +265,15 @@ export class Galaxy {
     // Update transaction particles
     this.txPool.update(dt);
 
-    // Update simulation (generates blocks, txs, bursts)
+    // Update simulation (generates or consumes data depending on mode)
     this.simulation.update(dt);
 
     // Update HUD
     this.hud.updateStats({
-      round: this.mockData.getRoundCounter(),
-      epoch: this.mockData.getEpoch(),
+      round: this.simulation.getRound(),
+      epoch: this.simulation.getEpoch(),
       tps: this.simulation.getTps(),
-      onlineCount: this.mockData.getOnlineCount(),
+      onlineCount: this.dataSource.getOnlineCount(),
       totalTransactions: this.simulation.getTotalTransactions(),
     });
 
@@ -273,6 +304,7 @@ export class Galaxy {
   }
 
   dispose(): void {
+    this.dataSource.stop();
     this.starfield.dispose();
     this.validatorField.dispose();
     this.metachainCore.dispose();

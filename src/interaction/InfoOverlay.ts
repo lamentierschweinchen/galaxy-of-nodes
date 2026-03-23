@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import type { MockTransaction } from '../data/MockData';
-import { SHARD_POSITIONS, METACHAIN_SHARD_ID } from '../utils/config';
+import type { TransactionData } from '../data/DataSource';
+import { SHARD_POSITIONS, METACHAIN_SHARD_ID, EXPLORER_BASE } from '../utils/config';
 import { SHARD_BASE_COLORS } from '../utils/colors';
 
 /**
@@ -185,7 +185,7 @@ export class InfoOverlay {
   private lastFeedUpdate = 0;
   private feedUpdateInterval = 1.5; // update feed every 1.5s (not every frame)
 
-  updateTransactionFeed(txs: MockTransaction[], dt: number): void {
+  updateTransactionFeed(txs: TransactionData[], dt: number): void {
     if (!this.active || txs.length === 0) return;
 
     this.lastFeedUpdate += dt;
@@ -215,7 +215,13 @@ export class InfoOverlay {
         : tx.type === 'esdtTransfer' ? '#c4a0ff'
           : 'rgba(255,255,255,0.6)';
 
-      const row = document.createElement('div');
+      const hasHash = tx.txHash && tx.txHash.length > 8;
+      const row = document.createElement(hasHash ? 'a' : 'div') as HTMLElement;
+      if (hasHash) {
+        (row as HTMLAnchorElement).href = `${EXPLORER_BASE}/transactions/${tx.txHash}`;
+        (row as HTMLAnchorElement).target = '_blank';
+        (row as HTMLAnchorElement).rel = 'noopener noreferrer';
+      }
       row.style.cssText = `
         font-family: 'SF Mono', 'Fira Code', monospace;
         font-size: 10px;
@@ -229,7 +235,15 @@ export class InfoOverlay {
         animation: txFadeIn 0.3s ease forwards;
         animation-delay: ${idx * 0.05}s;
         border-bottom: 1px solid rgba(255,255,255,0.03);
+        text-decoration: none;
+        pointer-events: ${hasHash ? 'auto' : 'none'};
+        cursor: ${hasHash ? 'pointer' : 'default'};
+        transition: opacity 0.15s ease;
       `;
+      if (hasHash) {
+        row.addEventListener('mouseenter', () => { row.style.opacity = '1'; });
+        row.addEventListener('mouseleave', () => { row.style.opacity = ''; });
+      }
 
       row.innerHTML = `
         <span style="color:${typeColor};">${funcName}</span>
@@ -240,7 +254,7 @@ export class InfoOverlay {
     }
   }
 
-  private humanReadableTxType(tx: MockTransaction): string {
+  private humanReadableTxType(tx: TransactionData): string {
     if (tx.function) {
       // Capitalize and space-separate camelCase
       const name = tx.function

@@ -1,4 +1,4 @@
-import type { MockValidator } from '../data/MockData';
+import type { ValidatorInfo } from '../data/DataSource';
 
 /**
  * Floating tooltip that follows mouse position.
@@ -31,7 +31,7 @@ export class Tooltip {
     document.body.appendChild(this.el);
   }
 
-  show(x: number, y: number, validator: MockValidator): void {
+  show(x: number, y: number, validator: ValidatorInfo): void {
     const stakeEgld = (parseFloat(validator.stake) / 1e18).toFixed(0);
     const ratingColor =
       validator.rating >= 95 ? '#4ecdc4' :

@@ -1,4 +1,5 @@
 import type { ValidatorData } from '../scene/ValidatorField';
+import type { DataSource, DataSourceCallbacks, ValidatorInfo } from './DataSource';
 import { METACHAIN_SHARD_ID } from '../utils/config';
 import { seededSequence } from '../utils/math';
 
@@ -90,7 +91,7 @@ export interface MockTransaction {
 /**
  * Generates rich, realistic mock data for the entire visualization.
  */
-export class MockDataGenerator {
+export class MockDataGenerator implements DataSource {
   private validators: MockValidator[] = [];
   private blockNonces: Map<number, number> = new Map();
   private roundCounter = 0;
@@ -109,6 +110,19 @@ export class MockDataGenerator {
     for (const shard of [0, 1, 2, METACHAIN_SHARD_ID]) {
       this.blockNonces.set(shard, 10000 + Math.floor(Math.random() * 5000));
     }
+  }
+
+  // --- DataSource interface ---
+  async initialize(): Promise<void> {
+    // Mock data is generated in constructor, nothing to do
+  }
+
+  start(callbacks: DataSourceCallbacks): void {
+    callbacks.onValidatorsLoaded(this.validators);
+  }
+
+  stop(): void {
+    // No-op for mock
   }
 
   private generateValidators(): void {
@@ -186,7 +200,7 @@ export class MockDataGenerator {
     this.cachedOnlineCount = this.validators.filter((v) => v.online).length;
   }
 
-  getValidators(): MockValidator[] {
+  getValidators(): ValidatorInfo[] {
     return this.validators;
   }
 
@@ -202,7 +216,7 @@ export class MockDataGenerator {
   }
 
   /** Get a validator by index */
-  getValidator(index: number): MockValidator | undefined {
+  getValidator(index: number): ValidatorInfo | undefined {
     return this.validators[index];
   }
 
@@ -212,7 +226,7 @@ export class MockDataGenerator {
   }
 
   /** Get random validator from a specific shard (O(1) lookup, O(1) pick) */
-  getRandomValidatorInShard(shard: number): MockValidator {
+  getRandomValidatorInShard(shard: number): ValidatorInfo {
     const shardValidators = this.shardValidatorMap.get(shard) ?? this.validators;
     return shardValidators[Math.floor(Math.random() * shardValidators.length)];
   }

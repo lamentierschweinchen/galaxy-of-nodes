@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { ValidatorField } from '../scene/ValidatorField';
-import { MockDataGenerator, MockValidator } from '../data/MockData';
+import type { DataSource, ValidatorInfo } from '../data/DataSource';
 import { Tooltip } from './Tooltip';
 
 /**
@@ -12,18 +12,18 @@ export class ValidatorRaycaster {
   private mouse: THREE.Vector2;
   private camera: THREE.PerspectiveCamera;
   private validatorField: ValidatorField;
-  private mockData: MockDataGenerator;
+  private dataSource: DataSource;
   private tooltip: Tooltip;
   private canvas: HTMLCanvasElement;
 
   private hoveredIndex: number | null = null;
-  private onClickCallback?: (validator: MockValidator) => void;
+  private onClickCallback?: (validator: ValidatorInfo) => void;
 
   constructor(
     camera: THREE.PerspectiveCamera,
     canvas: HTMLCanvasElement,
     validatorField: ValidatorField,
-    mockData: MockDataGenerator,
+    dataSource: DataSource,
   ) {
     this.raycaster = new THREE.Raycaster();
     this.raycaster.params.Points!.threshold = 1.5;
@@ -31,7 +31,7 @@ export class ValidatorRaycaster {
     this.camera = camera;
     this.canvas = canvas;
     this.validatorField = validatorField;
-    this.mockData = mockData;
+    this.dataSource = dataSource;
     this.tooltip = new Tooltip();
 
     // Desktop
@@ -62,7 +62,7 @@ export class ValidatorRaycaster {
 
     if (index !== null) {
       this.hoveredIndex = index;
-      const validator = this.mockData.getValidator(index);
+      const validator = this.dataSource.getValidator(index);
       if (validator) {
         this.tooltip.show(event.clientX, event.clientY, validator);
         this.canvas.style.cursor = 'pointer';
@@ -76,7 +76,7 @@ export class ValidatorRaycaster {
 
   private onClick = (_event: MouseEvent): void => {
     if (this.hoveredIndex !== null) {
-      const validator = this.mockData.getValidator(this.hoveredIndex);
+      const validator = this.dataSource.getValidator(this.hoveredIndex);
       if (validator) {
         this.onClickCallback?.(validator);
       }
@@ -114,7 +114,7 @@ export class ValidatorRaycaster {
     const index = this.raycast();
 
     if (index !== null) {
-      const validator = this.mockData.getValidator(index);
+      const validator = this.dataSource.getValidator(index);
       if (validator) {
         // Show tooltip briefly, then zoom
         this.tooltip.show(touch.clientX, touch.clientY, validator);
@@ -129,7 +129,7 @@ export class ValidatorRaycaster {
     this.touchStartPos = null;
   };
 
-  onValidatorClick(callback: (validator: MockValidator) => void): void {
+  onValidatorClick(callback: (validator: ValidatorInfo) => void): void {
     this.onClickCallback = callback;
   }
 

@@ -24,9 +24,14 @@ export const CAMERA_MIN_DISTANCE = 15;
 export const CAMERA_MAX_DISTANCE = 200;
 export const CAMERA_INACTIVITY_RESUME_MS = 15_000;
 
-// API (Phase 3+)
-export const API_BASE = 'https://api.multiversx.com';
+// API
+export const API_BASE = 'http://api.battleofnodes.com';
+export const EXPLORER_BASE = 'https://explorer.battleofnodes.com';
 export const POLL_INTERVAL_MS = 6_000;
+export const API_VALIDATOR_FETCH_SIZE = 10_000;
+export const API_BLOCK_FETCH_SIZE = 5;
+export const API_TX_FETCH_SIZE = 50;
+export const MAX_POLL_BACKOFF_MS = 30_000;
 
 // Bloom
 export const BLOOM_STRENGTH = 0.8;

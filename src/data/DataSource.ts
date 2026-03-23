@@ -42,6 +42,11 @@ export interface ValidatorInfo extends ValidatorData {
   name: string;
   provider: string;
   identity: string;
+  leaderSuccess?: number;
+  leaderFailure?: number;
+  validatorSuccess?: number;
+  validatorFailure?: number;
+  topUp?: string;
 }
 
 export interface DataSourceCallbacks {
@@ -77,52 +82,3 @@ export interface DataSource {
   getOnlineCount(): number;
 }
 
-// ============================================================
-// Future LiveDataSource implementation sketch:
-// ============================================================
-//
-// export class LiveDataSource implements DataSource {
-//   private apiBase = 'https://api.multiversx.com';
-//   private validators: ValidatorInfo[] = [];
-//   private pollInterval: number | null = null;
-//   private callbacks?: DataSourceCallbacks;
-//   private lastBlockNonces = new Map<number, number>();
-//   private lastTxHashes = new Set<string>();
-//
-//   async initialize(): Promise<void> {
-//     // Fetch validators: GET /nodes?type=validator&size=10000
-//     const resp = await fetch(`${this.apiBase}/nodes?type=validator&size=10000`);
-//     const nodes = await resp.json();
-//     this.validators = nodes.map((n: any) => ({
-//       bls: n.bls,
-//       shard: n.shard,
-//       rating: n.rating ?? 0,
-//       stake: n.stake ?? '0',
-//       online: n.online ?? false,
-//       name: n.name ?? `Node ${n.bls.slice(0, 8)}`,
-//       provider: n.provider ?? 'Unknown',
-//       identity: n.identity ?? n.bls.slice(0, 12),
-//     }));
-//   }
-//
-//   start(callbacks: DataSourceCallbacks): void {
-//     this.callbacks = callbacks;
-//     callbacks.onValidatorsLoaded(this.validators);
-//
-//     // Poll every 6 seconds
-//     this.pollInterval = window.setInterval(() => this.poll(), 6000);
-//   }
-//
-//   private async poll(): Promise<void> {
-//     // Fetch stats: GET /stats
-//     // Fetch blocks per shard: GET /blocks?shard=X&size=1
-//     // Fetch recent transactions: GET /transactions?size=50&order=desc
-//     // Compare with last known state, emit callbacks for new data
-//   }
-//
-//   stop(): void {
-//     if (this.pollInterval) clearInterval(this.pollInterval);
-//   }
-//
-//   // ... getters same as MockDataGenerator
-// }
