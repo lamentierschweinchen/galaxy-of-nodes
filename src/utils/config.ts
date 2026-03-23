@@ -25,7 +25,7 @@ export const CAMERA_MAX_DISTANCE = 200;
 export const CAMERA_INACTIVITY_RESUME_MS = 15_000;
 
 // API
-export const API_BASE = 'http://api.battleofnodes.com';
+export const API_BASE = 'https://api.battleofnodes.com';
 export const EXPLORER_BASE = 'https://explorer.battleofnodes.com';
 export const POLL_INTERVAL_MS = 6_000;
 export const API_VALIDATOR_FETCH_SIZE = 10_000;
