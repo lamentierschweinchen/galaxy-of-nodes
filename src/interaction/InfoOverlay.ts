@@ -125,14 +125,15 @@ export class InfoOverlay {
     }
 
     // Transaction feed — right side
+    const isMobile = window.innerWidth <= 480;
     this.txFeed = document.createElement('div');
     this.txFeed.style.cssText = `
       position: absolute;
-      right: 28px;
+      right: ${isMobile ? '16px' : '28px'};
       top: 50%;
       transform: translateY(-50%);
-      width: 240px;
-      max-height: 400px;
+      width: ${isMobile ? '180px' : '240px'};
+      max-height: ${isMobile ? '300px' : '400px'};
       overflow: hidden;
       pointer-events: none;
     `;
@@ -169,11 +170,12 @@ export class InfoOverlay {
 
   private createLegendButton(): void {
     // Wrapper — always visible, bottom-left
+    const wrapperMobile = window.innerWidth <= 480;
     const wrapper = document.createElement('div');
     wrapper.style.cssText = `
       position: absolute;
-      bottom: 24px;
-      left: 28px;
+      bottom: ${wrapperMobile ? '16px' : '24px'};
+      left: ${wrapperMobile ? '16px' : '28px'};
       z-index: 20;
       pointer-events: auto;
     `;
@@ -240,18 +242,19 @@ export class InfoOverlay {
 
     // Panel — the actual legend content, appears above the button
     this.legendPanel = document.createElement('div');
+    const legendMobile = window.innerWidth <= 480;
     this.legendPanel.style.cssText = `
       position: absolute;
       bottom: 44px;
       left: 0;
-      width: 210px;
-      padding: 12px 14px;
-      background: rgba(5, 5, 16, 0.85);
+      width: ${legendMobile ? '195px' : '230px'};
+      padding: ${legendMobile ? '11px 12px' : '14px 16px'};
+      background: rgba(5, 5, 16, 0.88);
       border: 1px solid rgba(255, 255, 255, 0.08);
       border-radius: 8px;
       backdrop-filter: blur(12px);
       font-family: 'SF Mono', 'Fira Code', monospace;
-      line-height: 1.7;
+      line-height: 1.6;
       opacity: 0;
       transform: translateY(6px);
       transition: opacity 0.25s ease, transform 0.25s ease;
@@ -264,18 +267,30 @@ export class InfoOverlay {
 
     this.legendPanel.innerHTML = `
       <div style="font-size:10px; color:rgba(255,255,255,0.45);">
-        <div style="margin-bottom:6px;">
-          <span style="color:rgba(255,255,255,0.6);">&#9679;</span> Stars = validator nodes<br>
-          <span style="margin-left:12px; font-size:9px; color:rgba(255,255,255,0.28);">bright = high rating &middot; large = high stake</span>
+        <div style="margin-bottom:10px; font-size:9px; letter-spacing:1px; color:rgba(255,255,255,0.3); border-bottom:1px solid rgba(255,255,255,0.06); padding-bottom:8px;">
+          The MultiversX blockchain, visualized as a living galaxy
         </div>
-        <div style="margin-bottom:6px;">
-          <span style="color:rgba(255,255,255,0.6);">&#9679;</span> Particles = transactions<br>
-          <span style="margin-left:12px; font-size:9px; color:rgba(255,255,255,0.28);">&#9473; intra-shard &nbsp;&nbsp;&#9476;&#9476; cross-shard</span>
+        <div style="margin-bottom:7px;">
+          <span style="color:rgba(255,255,255,0.6);">&#9679;</span> Each <b style="color:rgba(255,255,255,0.6);">star</b> is a network validator<br>
+          <span style="margin-left:12px; font-size:9px; color:rgba(255,255,255,0.28);">Brighter = more reliable &middot; Larger = more stake</span><br>
+          <span style="margin-left:12px; font-size:9px; color:rgba(255,255,255,0.28);">Flares when proposing a block</span>
         </div>
-        <div style="margin-bottom:8px;">
-          <span style="color:rgba(255,255,255,0.75);">&#9673;</span> Center = metachain core
+        <div style="margin-bottom:7px;">
+          <span style="color:rgba(255,255,255,0.6);">&#9679;</span> Moving <b style="color:rgba(255,255,255,0.6);">particles</b> are transactions<br>
+          <span style="margin-left:12px; font-size:9px; color:rgba(255,255,255,0.28);">Within a cluster = same shard</span><br>
+          <span style="margin-left:12px; font-size:9px; color:rgba(255,255,255,0.28);">Between clusters = cross-shard</span><br>
+          <span style="margin-left:12px; font-size:9px; color:rgba(255,255,255,0.28);">Bigger &amp; brighter = higher value</span>
         </div>
-        <div style="font-size:9px; color:rgba(255,255,255,0.28); display:flex; gap:10px; border-top:1px solid rgba(255,255,255,0.06); padding-top:6px;">
+        <div style="margin-bottom:5px; font-size:9px; color:rgba(255,255,255,0.28); display:flex; gap:8px; flex-wrap:wrap;">
+          <span><span style="color:rgb(255,217,128);">&#9679;</span> Transfer</span>
+          <span><span style="color:rgb(77,230,255);">&#9679;</span> SC Call</span>
+          <span><span style="color:rgb(230,128,255);">&#9679;</span> Token</span>
+        </div>
+        <div style="margin-bottom:8px; border-top:1px solid rgba(255,255,255,0.04); padding-top:6px;">
+          <span style="color:rgba(255,255,255,0.75);">&#9673;</span> Bright <b style="color:rgba(255,255,255,0.6);">core</b> = metachain<br>
+          <span style="margin-left:12px; font-size:9px; color:rgba(255,255,255,0.28);">Coordinates all shards &middot; Pulses on blocks</span>
+        </div>
+        <div style="font-size:9px; color:rgba(255,255,255,0.28); display:flex; gap:10px; border-top:1px solid rgba(255,255,255,0.06); padding-top:7px;">
           <span><span style="color:${shard0};">&#9679;</span> Shard 0</span>
           <span><span style="color:${shard1};">&#9679;</span> Shard 1</span>
           <span><span style="color:${shard2};">&#9679;</span> Shard 2</span>
