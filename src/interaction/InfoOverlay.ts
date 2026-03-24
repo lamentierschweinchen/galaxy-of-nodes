@@ -158,6 +158,164 @@ export class InfoOverlay {
     `;
     this.txFeed.appendChild(this.txFeedList);
     this.overlay.appendChild(this.txFeed);
+
+    // Legend — standalone hover/tap button, independent of info overlay
+    this.createLegendButton();
+  }
+
+  private legendOpen = false;
+  private legendBtn!: HTMLElement;
+  private legendPanel!: HTMLElement;
+
+  private createLegendButton(): void {
+    // Wrapper — always visible, bottom-left
+    const wrapper = document.createElement('div');
+    wrapper.style.cssText = `
+      position: absolute;
+      bottom: 24px;
+      left: 28px;
+      z-index: 20;
+      pointer-events: auto;
+    `;
+
+    // Button — tiny galaxy icon (3 colored dots orbiting a bright center)
+    this.legendBtn = document.createElement('button');
+    this.legendBtn.setAttribute('aria-label', 'What am I looking at?');
+    this.legendBtn.setAttribute('title', 'Legend');
+    this.legendBtn.style.cssText = `
+      width: 36px;
+      height: 36px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 50%;
+      background: rgba(5, 5, 16, 0.6);
+      backdrop-filter: blur(8px);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: border-color 0.2s ease, background 0.2s ease;
+      padding: 0;
+      position: relative;
+    `;
+
+    // SVG galaxy icon: bright center + 3 colored orbit dots
+    this.legendBtn.innerHTML = `
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+        <circle cx="9" cy="9" r="2.5" fill="white" opacity="0.7"/>
+        <circle cx="9" cy="9" r="4.5" stroke="white" stroke-width="0.3" opacity="0.15"/>
+        <circle cx="4.5" cy="7" r="1.3" fill="#e8a849" opacity="0.8"/>
+        <circle cx="13" cy="7" r="1.3" fill="#4ecdc4" opacity="0.8"/>
+        <circle cx="9" cy="14" r="1.3" fill="#e06c75" opacity="0.8"/>
+      </svg>
+    `;
+
+    // Hover effects
+    this.legendBtn.addEventListener('mouseenter', () => {
+      this.legendBtn.style.borderColor = 'rgba(255, 255, 255, 0.35)';
+      this.legendBtn.style.background = 'rgba(5, 5, 16, 0.8)';
+      if (!this.legendOpen) this.showLegend();
+    });
+    this.legendBtn.addEventListener('mouseleave', () => {
+      if (!this.legendOpen) {
+        this.legendBtn.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+        this.legendBtn.style.background = 'rgba(5, 5, 16, 0.6)';
+      }
+    });
+    // Click toggles on mobile (and as fallback on desktop)
+    this.legendBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (this.legendOpen) this.hideLegend();
+      else this.showLegend();
+    });
+    // Focus a11y
+    this.legendBtn.addEventListener('focus', () => {
+      this.legendBtn.style.outline = '1px solid rgba(255, 255, 255, 0.5)';
+      this.legendBtn.style.outlineOffset = '2px';
+    });
+    this.legendBtn.addEventListener('blur', () => {
+      this.legendBtn.style.outline = 'none';
+    });
+
+    wrapper.appendChild(this.legendBtn);
+
+    // Panel — the actual legend content, appears above the button
+    this.legendPanel = document.createElement('div');
+    this.legendPanel.style.cssText = `
+      position: absolute;
+      bottom: 44px;
+      left: 0;
+      width: 210px;
+      padding: 12px 14px;
+      background: rgba(5, 5, 16, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 8px;
+      backdrop-filter: blur(12px);
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      line-height: 1.7;
+      opacity: 0;
+      transform: translateY(6px);
+      transition: opacity 0.25s ease, transform 0.25s ease;
+      pointer-events: none;
+    `;
+
+    const shard0 = '#e8a849';
+    const shard1 = '#4ecdc4';
+    const shard2 = '#e06c75';
+
+    this.legendPanel.innerHTML = `
+      <div style="font-size:10px; color:rgba(255,255,255,0.45);">
+        <div style="margin-bottom:6px;">
+          <span style="color:rgba(255,255,255,0.6);">&#9679;</span> Stars = validator nodes<br>
+          <span style="margin-left:12px; font-size:9px; color:rgba(255,255,255,0.28);">bright = high rating &middot; large = high stake</span>
+        </div>
+        <div style="margin-bottom:6px;">
+          <span style="color:rgba(255,255,255,0.6);">&#9679;</span> Particles = transactions<br>
+          <span style="margin-left:12px; font-size:9px; color:rgba(255,255,255,0.28);">&#9473; intra-shard &nbsp;&nbsp;&#9476;&#9476; cross-shard</span>
+        </div>
+        <div style="margin-bottom:8px;">
+          <span style="color:rgba(255,255,255,0.75);">&#9673;</span> Center = metachain core
+        </div>
+        <div style="font-size:9px; color:rgba(255,255,255,0.28); display:flex; gap:10px; border-top:1px solid rgba(255,255,255,0.06); padding-top:6px;">
+          <span><span style="color:${shard0};">&#9679;</span> Shard 0</span>
+          <span><span style="color:${shard1};">&#9679;</span> Shard 1</span>
+          <span><span style="color:${shard2};">&#9679;</span> Shard 2</span>
+        </div>
+      </div>
+    `;
+
+    wrapper.appendChild(this.legendPanel);
+
+    // Close panel when hovering away from the whole wrapper (desktop)
+    wrapper.addEventListener('mouseleave', () => {
+      this.hideLegend();
+    });
+
+    // Close on outside click (mobile)
+    document.addEventListener('click', (e) => {
+      if (this.legendOpen && !wrapper.contains(e.target as Node)) {
+        this.hideLegend();
+      }
+    });
+
+    this.container.appendChild(wrapper);
+  }
+
+  private showLegend(): void {
+    this.legendOpen = true;
+    this.legendPanel.style.opacity = '1';
+    this.legendPanel.style.transform = 'translateY(0)';
+    this.legendPanel.style.pointerEvents = 'auto';
+    this.legendBtn.style.borderColor = 'rgba(255, 255, 255, 0.4)';
+    this.legendBtn.style.background = 'rgba(5, 5, 16, 0.85)';
+  }
+
+  private hideLegend(): void {
+    this.legendOpen = false;
+    this.legendPanel.style.opacity = '0';
+    this.legendPanel.style.transform = 'translateY(6px)';
+    this.legendPanel.style.pointerEvents = 'none';
+    this.legendBtn.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+    this.legendBtn.style.background = 'rgba(5, 5, 16, 0.6)';
   }
 
   private toggle(): void {
