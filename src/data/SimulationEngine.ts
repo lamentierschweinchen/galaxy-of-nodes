@@ -21,7 +21,7 @@ export class SimulationEngine {
   private blockTimer = 0;
   private txTimer = 0;
   private burstTimer = 0;
-  private blockInterval = 6.0;
+  private blockInterval = 0.6; // Supernova: 600ms block rounds
   private txSpawnInterval = 0.033;
   private burstInterval = 30.0;
   private shardBlockTimers: Map<number, number> = new Map();
@@ -64,11 +64,11 @@ export class SimulationEngine {
     this.metachainCore = metachainCore;
     this.liveMode = liveMode;
 
-    // Stagger shard block timers (mock mode only)
+    // Stagger shard block timers so shards don't all fire at once (mock mode only)
     this.shardBlockTimers.set(0, 0);
-    this.shardBlockTimers.set(1, 1.5);
-    this.shardBlockTimers.set(2, 3.0);
-    this.shardBlockTimers.set(METACHAIN_SHARD_ID, 4.5);
+    this.shardBlockTimers.set(1, 0.15);
+    this.shardBlockTimers.set(2, 0.30);
+    this.shardBlockTimers.set(METACHAIN_SHARD_ID, 0.45);
   }
 
   update(dt: number): void {
@@ -218,8 +218,8 @@ export class SimulationEngine {
     // Drain live tx queue gradually (spread over poll interval)
     if (this.liveTxQueue.length > 0) {
       this.liveTxDrainTimer += dt;
-      // Spread queued txs evenly over ~5 seconds
-      const drainInterval = Math.max(0.05, 5.0 / Math.max(1, this.liveTxQueue.length));
+      // Spread queued txs evenly over ~1.8s (drain before next 2s poll)
+      const drainInterval = Math.max(0.02, 1.8 / Math.max(1, this.liveTxQueue.length));
       if (this.liveTxDrainTimer >= drainInterval) {
         this.liveTxDrainTimer -= drainInterval;
         const tx = this.liveTxQueue.shift();

@@ -42,7 +42,7 @@ export class MetachainCore {
 
     // Decay pulse boost
     if (this.pulseBoost > 0.001) {
-      this.pulseBoost *= Math.exp(-dt * 2.5); // ~0.4s visible decay
+      this.pulseBoost *= Math.exp(-dt * 4.0); // ~0.25s visible decay for 600ms blocks
     } else {
       this.pulseBoost = 0;
     }

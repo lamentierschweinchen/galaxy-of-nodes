@@ -216,7 +216,7 @@ export class ValidatorField {
 
       // Decay proposer pulse
       if (this.proposerPulses[i] > 0.001) {
-        this.proposerPulses[i] *= Math.exp(-dt * 3.0);
+        this.proposerPulses[i] *= Math.exp(-dt * 5.0); // fast snap for 600ms blocks
         if (this.proposerPulses[i] < 0.001) this.proposerPulses[i] = 0;
         pulsesDirty = true;
       }

@@ -24,12 +24,15 @@ export const CAMERA_MIN_DISTANCE = 15;
 export const CAMERA_MAX_DISTANCE = 200;
 export const CAMERA_INACTIVITY_RESUME_MS = 15_000;
 
-// API
+// Supernova block time: 600ms rounds
+export const BLOCK_TIME_MS = 600;
+
+// API — poll every 2s (catches ~3 blocks per poll at 600ms rounds)
 export const API_BASE = 'https://api.battleofnodes.com';
 export const EXPLORER_BASE = 'https://bon-explorer.multiversx.com';
-export const POLL_INTERVAL_MS = 6_000;
+export const POLL_INTERVAL_MS = 2_000;
 export const API_VALIDATOR_FETCH_SIZE = 10_000;
-export const API_BLOCK_FETCH_SIZE = 5;
+export const API_BLOCK_FETCH_SIZE = 10;
 export const API_TX_FETCH_SIZE = 50;
 export const MAX_POLL_BACKOFF_MS = 30_000;
 
