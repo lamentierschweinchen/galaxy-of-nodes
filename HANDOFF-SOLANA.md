@@ -302,8 +302,31 @@ interface SolanaCallbacks {
 
 ## Project Setup
 
+### Step 0: Workspace Organization
+
+The project lives in the "Beautiful Blockchains" workspace. Before writing any code:
+
+1. Copy reference files from Galaxy of Nodes into the Galaxy Explorer folder:
+   ```bash
+   cp -r /Users/ls/Documents/MultiversX/galaxy-of-nodes/* "/Users/ls/Documents/Beautiful Blockchains/Galaxy Explorer/"
+   ```
+
+2. Copy the handoff brief + research into the Strata Explorer folder:
+   ```bash
+   cp /Users/ls/Documents/MultiversX/galaxy-of-nodes/HANDOFF-SOLANA.md "/Users/ls/Documents/Beautiful Blockchains/Strata Explorer/"
+   cp /Users/ls/Documents/MultiversX/galaxy-of-nodes/RESEARCH-SOLANA.md "/Users/ls/Documents/Beautiful Blockchains/Strata Explorer/"
+   cp /Users/ls/Documents/MultiversX/galaxy-of-nodes/RESEARCH-BRIEFS.md "/Users/ls/Documents/Beautiful Blockchains/Strata Explorer/"
+   ```
+
+3. Initialize the Strata project inside that folder. All new code goes in:
+   `/Users/ls/Documents/Beautiful Blockchains/Strata Explorer/`
+
+4. The Galaxy Explorer folder is your **read-only reference**. Study the code patterns there (especially `src/data/DataSource.ts`, `src/scene/Galaxy.ts`, `src/shaders/`, and `src/data/MockData.ts`) but don't modify it.
+
+### File Structure
+
 ```
-the-strata/              # or solana-strata/ — new repo, separate from galaxy-of-nodes
+/Users/ls/Documents/Beautiful Blockchains/Strata Explorer/
 ├── index.html
 ├── vite.config.ts
 ├── package.json          # three, vite, typescript
