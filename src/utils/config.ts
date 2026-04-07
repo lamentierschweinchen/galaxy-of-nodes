@@ -28,8 +28,8 @@ export const CAMERA_INACTIVITY_RESUME_MS = 15_000;
 export const BLOCK_TIME_MS = 600;
 
 // API — poll every 2s (catches ~3 blocks per poll at 600ms rounds)
-export const API_BASE = 'https://api.battleofnodes.com';
-export const EXPLORER_BASE = 'https://bon-explorer.multiversx.com';
+export const API_BASE = 'https://testnet-api.multiversx.com';
+export const EXPLORER_BASE = 'https://testnet-explorer.multiversx.com';
 export const POLL_INTERVAL_MS = 2_000;
 export const API_VALIDATOR_FETCH_SIZE = 10_000;
 export const API_BLOCK_FETCH_SIZE = 10;
