@@ -22,10 +22,20 @@ if (!hasWebGL()) {
   errorEl.style.display = 'block';
 } else {
   (async () => {
-    // Determine data mode from URL param: ?data=live or ?data=mock (default)
+    // Determine data mode from URL param: ?data=mock or ?data=live (default).
+    // Live is the default deliberately: every organic share of this URL carries
+    // no query string, and a shared link showing a simulation while the page
+    // presents itself as the network is the one failure worth engineering out.
     const params = new URLSearchParams(window.location.search);
-    const dataMode = params.get('data') ?? 'mock';
+    const dataMode = params.get('data') ?? 'live';
     const isLive = dataMode === 'live';
+
+    // Whenever mock data is on screen it must say so. Falling back silently is
+    // what makes a simulation indistinguishable from the real network.
+    const demoBadgeEl = document.getElementById('demo-badge');
+    function showDemoBadge(): void {
+      if (demoBadgeEl) demoBadgeEl.style.display = 'block';
+    }
 
     let dataSource: DataSource;
 
@@ -39,9 +49,11 @@ if (!hasWebGL()) {
       } catch {
         console.warn('[Galaxy] LiveDataSource creation failed, falling back to mock');
         dataSource = new MockDataGenerator();
+        showDemoBadge();
       }
     } else {
       dataSource = new MockDataGenerator();
+      showDemoBadge();
     }
 
     try {
@@ -71,6 +83,7 @@ if (!hasWebGL()) {
       if (isLive) {
         console.warn('[Galaxy] Falling back to mock data');
         if (loadingEl) loadingEl.textContent = 'Network unavailable, loading demo...';
+        showDemoBadge();
         try {
           const mockSource = new MockDataGenerator();
           const galaxy = await Galaxy.create(container, mockSource, false);

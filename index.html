@@ -4,19 +4,19 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Galaxy of Nodes — MultiversX</title>
-  <meta name="description" content="A living cosmos visualization of the MultiversX blockchain network. 3,200 validator stars, real-time transaction particles, and adaptive state sharding — rendered as a galaxy." />
+  <meta name="description" content="A living cosmos visualization of the MultiversX blockchain network. Real-time transaction particles and adaptive state sharding — rendered as a galaxy." />
 
   <!-- Open Graph / Social Preview -->
   <meta property="og:type" content="website" />
   <meta property="og:title" content="Galaxy of Nodes — MultiversX" />
-  <meta property="og:description" content="Watch 3,200 validators and thousands of transactions flow through the MultiversX network — visualized as a living galaxy." />
+  <meta property="og:description" content="Watch validators and transactions flow through the MultiversX network — visualized as a living galaxy." />
   <meta property="og:image" content="/og-preview.png" />
   <meta property="og:url" content="https://galaxy-of-nodes.vercel.app" />
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="Galaxy of Nodes — MultiversX" />
-  <meta name="twitter:description" content="Watch 3,200 validators and thousands of transactions flow through the MultiversX network — visualized as a living galaxy." />
+  <meta name="twitter:description" content="Watch validators and transactions flow through the MultiversX network — visualized as a living galaxy." />
   <meta name="twitter:image" content="/og-preview.png" />
 
   <!-- Favicon -->
@@ -61,6 +61,23 @@
       margin-bottom: 12px;
       font-weight: 400;
     }
+    #demo-badge {
+      display: none;
+      position: absolute;
+      top: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 6px 12px;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      border-radius: 4px;
+      background: rgba(0, 0, 0, 0.6);
+      color: rgba(255, 255, 255, 0.75);
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 11px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      z-index: 120;
+    }
     #loading {
       display: none;
       position: absolute;
@@ -93,6 +110,7 @@
   <div id="app"></div>
   <div id="hud"></div>
   <div id="loading"></div>
+  <div id="demo-badge">Simulated data, not the live network</div>
   <div id="webgl-error">
     <h2>WebGL Required</h2>
     <p>This visualization requires WebGL to render.<br/>
