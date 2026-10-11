@@ -8,7 +8,7 @@ import {
 import {
   API_BASE,
   POLL_INTERVAL_MS,
-  METACHAIN_SHARD_ID,
+  STATS_EVERY_N_POLLS,
   API_VALIDATOR_FETCH_SIZE,
   API_BLOCK_FETCH_SIZE,
   API_TX_FETCH_SIZE,
@@ -56,6 +56,7 @@ interface ApiBlock {
   shard: number;
   txCount: number;
   timestamp: number;
+  timestampMs?: number;
 }
 
 interface ApiTransaction {
@@ -123,6 +124,24 @@ function mapTransaction(tx: ApiTransaction): TransactionData {
   };
 }
 
+const BLOCK_FIELDS = 'hash,nonce,round,shard,epoch,txCount,proposer,timestamp,timestampMs';
+const TX_FIELDS =
+  'txHash,sender,receiver,senderShard,receiverShard,value,status,function,timestamp';
+const NODE_FIELDS =
+  'bls,rating,tempRating,shard,type,status,online,name,owner,identity,provider,stake,topUp,' +
+  'leaderFailure,leaderSuccess,validatorFailure,validatorSuccess';
+
+// The API serves /stats with cache-control: max-age=14400, so without this a browser
+// keeps replaying a stats response up to four hours old.
+const NO_BROWSER_CACHE: RequestInit = { cache: 'no-store' };
+// A hung request must not stall the poll loop; the validator list is ~2MB, so it gets longer
+const FETCH_TIMEOUT_MS = 20_000;
+const NODES_TIMEOUT_MS = 60_000;
+
+function blockTimeMs(b: ApiBlock): number {
+  return b.timestampMs ?? b.timestamp * 1000;
+}
+
 export class LiveDataSource implements DataSource {
   private validators: ValidatorInfo[] = [];
   private blsValidatorMap: Map<string, ValidatorInfo> = new Map();
@@ -130,16 +149,26 @@ export class LiveDataSource implements DataSource {
   private onlineCount = 0;
 
   private callbacks: DataSourceCallbacks | null = null;
-  private pollTimer: ReturnType<typeof setInterval> | null = null;
+  private pollTimer: ReturnType<typeof setTimeout> | null = null;
+  private replayTimers: Set<ReturnType<typeof setTimeout>> = new Set();
+  private polling = false;
+  private pollCount = 0;
   private currentPollInterval = POLL_INTERVAL_MS;
   private consecutiveFailures = 0;
+  private lastBatchAt = 0; // when the last successful blocks response arrived
 
-  private previousTotalTxs = 0;
-  private lastPollTime = 0;
+  // Network stats, refreshed every STATS_EVERY_N_POLLS polls
+  private totalTxs = 0;
+  private lastStatsTime = 0;
+  private tps = 0;
   private currentEpoch = 0;
+  // Absolute round at which the current epoch began; the HUD shows rounds into the epoch
+  private epochStartRound = 0;
+  private lastEmittedRound = 0;
 
   // Dedup state
-  private seenBlockNonces: Map<number, Set<number>> = new Map(); // shard -> set of nonces
+  private seenBlocks: Set<string> = new Set(); // `${shard}:${nonce}`
+  private readonly MAX_SEEN_BLOCKS = 600;
   private seenTxHashes: Set<string> = new Set();
   private readonly MAX_SEEN_TX = 500;
 
@@ -151,57 +180,41 @@ export class LiveDataSource implements DataSource {
   ];
 
   async initialize(): Promise<void> {
-    // Fetch validators
-    const nodes = await this.fetchWithRetry<ApiNode[]>(
-      `${API_BASE}/nodes?type=validator&size=${API_VALIDATOR_FETCH_SIZE}`
+    const nodes = await this.fetchJson<ApiNode[]>(
+      `${API_BASE}/nodes?type=validator&size=${API_VALIDATOR_FETCH_SIZE}&fields=${NODE_FIELDS}`,
+      2,
+      undefined,
+      NODES_TIMEOUT_MS
     );
     this.buildValidatorCaches(nodes);
 
-    // Fetch initial stats for baseline tx count and epoch
-    const stats = await this.fetchWithRetry<ApiStats>(`${API_BASE}/stats`);
-    this.previousTotalTxs = stats.transactions;
-    this.currentEpoch = stats.epoch;
-    this.lastPollTime = Date.now();
-
-    // Fetch initial block nonces per shard for dedup baseline
-    const shards = this.getShardIds();
-    const blockResults = await Promise.allSettled(
-      shards.map((shard) =>
-        this.fetchWithRetry<ApiBlock[]>(
-          `${API_BASE}/blocks?shard=${shard}&size=${API_BLOCK_FETCH_SIZE}`
-        )
-      )
-    );
-    for (let i = 0; i < shards.length; i++) {
-      const result = blockResults[i];
-      if (result.status === 'fulfilled') {
-        const nonceSet = new Set<number>();
-        for (const block of result.value) {
-          nonceSet.add(block.nonce);
-        }
-        this.seenBlockNonces.set(shards[i], nonceSet);
-      }
-    }
+    // Baseline stats and block dedup, taken together so the round anchor lines up
+    const [stats, blocks] = await Promise.all([
+      this.fetchJson<ApiStats>(`${API_BASE}/stats`, 2, NO_BROWSER_CACHE),
+      this.fetchJson<ApiBlock[]>(this.blocksUrl(), 2),
+    ]);
+    for (const block of blocks) this.markBlockSeen(block);
+    this.lastBatchAt = Date.now();
+    this.applyStats(stats, blocks);
   }
 
   start(callbacks: DataSourceCallbacks): void {
     this.callbacks = callbacks;
     this.consecutiveFailures = 0;
     this.currentPollInterval = POLL_INTERVAL_MS;
+    // initialize() just fetched stats; refresh them on the second poll, then every N
+    this.pollCount = STATS_EVERY_N_POLLS - 1;
 
-    // Emit loaded validators immediately
     callbacks.onValidatorsLoaded(this.validators);
+    this.emitStats();
 
-    // First poll immediately, then on interval
-    this.poll();
-    this.pollTimer = setInterval(() => this.poll(), this.currentPollInterval);
+    document.addEventListener('visibilitychange', this.onVisibilityChange);
+    void this.poll();
   }
 
   stop(): void {
-    if (this.pollTimer !== null) {
-      clearInterval(this.pollTimer);
-      this.pollTimer = null;
-    }
+    document.removeEventListener('visibilitychange', this.onVisibilityChange);
+    this.clearTimers();
     this.callbacks = null;
   }
 
@@ -245,133 +258,207 @@ export class LiveDataSource implements DataSource {
     }
   }
 
-  private getShardIds(): number[] {
-    const shards = new Set<number>();
-    for (const v of this.validators) {
-      shards.add(v.shard);
-    }
-    // Ensure metachain is included
-    shards.add(METACHAIN_SHARD_ID);
-    return Array.from(shards).sort((a, b) => a - b);
+  private blocksUrl(): string {
+    return `${API_BASE}/blocks?size=${API_BLOCK_FETCH_SIZE}&fields=${BLOCK_FIELDS}`;
   }
 
+  // Hidden tabs stop polling entirely, so a background tab costs the API nothing
+  private readonly onVisibilityChange = (): void => {
+    if (document.hidden) {
+      this.clearTimers();
+    } else if (this.callbacks && this.pollTimer === null && !this.polling) {
+      void this.poll();
+    }
+  };
+
+  private clearTimers(): void {
+    if (this.pollTimer !== null) {
+      clearTimeout(this.pollTimer);
+      this.pollTimer = null;
+    }
+    for (const timer of this.replayTimers) clearTimeout(timer);
+    this.replayTimers.clear();
+  }
+
+  private schedulePoll(delay: number): void {
+    if (this.pollTimer !== null) clearTimeout(this.pollTimer);
+    this.pollTimer = setTimeout(() => {
+      this.pollTimer = null;
+      void this.poll();
+    }, delay);
+  }
+
+  /**
+   * One poll: blocks for all shards, the latest transactions, and network stats every
+   * few polls. Polls never overlap; the next is scheduled once this one settles.
+   */
   private async poll(): Promise<void> {
+    if (!this.callbacks || this.polling || document.hidden) return;
+    this.polling = true;
+    const pollStartedAt = Date.now();
+
+    const includeStats = this.pollCount % STATS_EVERY_N_POLLS === 0;
+    this.pollCount++;
+
+    const [blocksResult, txResult, statsResult] = await Promise.allSettled([
+      this.fetchJson<ApiBlock[]>(this.blocksUrl()),
+      this.fetchJson<ApiTransaction[]>(
+        `${API_BASE}/transactions?size=${API_TX_FETCH_SIZE}&order=desc&fields=${TX_FIELDS}`
+      ),
+      includeStats
+        ? this.fetchJson<ApiStats>(`${API_BASE}/stats`, 0, NO_BROWSER_CACHE)
+        : Promise.resolve(null),
+    ]);
+    this.polling = false;
     if (!this.callbacks) return;
 
-    try {
-      const shards = this.getShardIds();
-
-      // Fetch stats, blocks per shard, and transactions in parallel
-      const [statsResult, ...rest] = await Promise.allSettled([
-        this.fetchWithRetry<ApiStats>(`${API_BASE}/stats`),
-        ...shards.map((shard) =>
-          this.fetchWithRetry<ApiBlock[]>(
-            `${API_BASE}/blocks?shard=${shard}&size=${API_BLOCK_FETCH_SIZE}`
-          )
-        ),
-        this.fetchWithRetry<ApiTransaction[]>(
-          `${API_BASE}/transactions?size=${API_TX_FETCH_SIZE}&order=desc`
-        ),
-      ]);
-
-      const blockResults = rest.slice(0, shards.length);
-      const txResult = rest[shards.length];
-
-      // Process stats
-      if (statsResult.status === 'fulfilled') {
-        const stats = statsResult.value;
-        const now = Date.now();
-        const elapsed = (now - this.lastPollTime) / 1000;
-        const txDelta = stats.transactions - this.previousTotalTxs;
-        const tps = elapsed > 0 ? Math.max(0, txDelta / elapsed) : 0;
-
-        this.callbacks.onStatsUpdate({
-          tps: Math.round(tps * 100) / 100,
-          totalTransactions: stats.transactions,
-          epoch: stats.epoch,
-          round: stats.roundsPassed,
-        });
-
-        // Refresh validators on epoch change (non-blocking)
-        if (stats.epoch !== this.currentEpoch) {
-          this.currentEpoch = stats.epoch;
-          this.refreshValidators();
-        }
-
-        this.previousTotalTxs = stats.transactions;
-        this.lastPollTime = now;
-      }
-
-      // Process blocks - dedup by nonce per shard
-      for (let i = 0; i < shards.length; i++) {
-        const result = blockResults[i];
-        if (result.status !== 'fulfilled') continue;
-        const shard = shards[i];
-        const blocks = result.value as ApiBlock[];
-
-        if (!this.seenBlockNonces.has(shard)) {
-          this.seenBlockNonces.set(shard, new Set());
-        }
-        const seen = this.seenBlockNonces.get(shard)!;
-
-        for (const block of blocks) {
-          if (!seen.has(block.nonce)) {
-            seen.add(block.nonce);
-            this.callbacks.onNewBlock(mapBlock(block));
-          }
-        }
-
-        // Bound the seen set: keep only the latest nonces
-        if (seen.size > 100) {
-          const sorted = Array.from(seen).sort((a, b) => b - a);
-          const keep = new Set(sorted.slice(0, 50));
-          this.seenBlockNonces.set(shard, keep);
-        }
-      }
-
-      // Process transactions - dedup by hash, diversity selection
-      if (txResult.status === 'fulfilled') {
-        const rawTxs = txResult.value as ApiTransaction[];
-        const newTxs: TransactionData[] = [];
-
-        for (const raw of rawTxs) {
-          if (!this.seenTxHashes.has(raw.txHash)) {
-            this.seenTxHashes.add(raw.txHash);
-            newTxs.push(mapTransaction(raw));
-          }
-        }
-
-        // Bound the seen tx set
-        if (this.seenTxHashes.size > this.MAX_SEEN_TX) {
-          const arr = Array.from(this.seenTxHashes);
-          this.seenTxHashes = new Set(arr.slice(arr.length - this.MAX_SEEN_TX));
-        }
-
-        if (newTxs.length > 0) {
-          // Round-robin diversity: reorder to prioritize showing one of each type
-          const sorted = this.diversifyTransactions(newTxs);
-          this.callbacks.onNewTransactions(sorted);
-        }
-      }
-
-      // Reset backoff on success
-      this.consecutiveFailures = 0;
-      if (this.currentPollInterval !== POLL_INTERVAL_MS) {
-        this.currentPollInterval = POLL_INTERVAL_MS;
-        this.resetPollInterval();
-      }
-    } catch (err) {
+    // Any failed request backs the whole loop off. The API's rate limiter answers 429
+    // without CORS headers, so the browser reports it as a network error, not a status.
+    const failed = [blocksResult, txResult, statsResult].some((r) => r.status === 'rejected');
+    if (failed) {
       this.consecutiveFailures++;
-      console.warn(`[LiveDataSource] Poll failure #${this.consecutiveFailures}:`, err);
+      this.currentPollInterval = Math.min(
+        POLL_INTERVAL_MS * 2 ** this.consecutiveFailures,
+        MAX_POLL_BACKOFF_MS
+      );
+      console.warn(
+        `[LiveDataSource] Poll failed (${this.consecutiveFailures} in a row), ` +
+          `next poll in ${this.currentPollInterval / 1000}s`
+      );
+    } else {
+      this.consecutiveFailures = 0;
+      this.currentPollInterval = POLL_INTERVAL_MS;
+    }
 
-      if (this.consecutiveFailures >= 3) {
-        const newInterval = Math.min(this.currentPollInterval * 2, MAX_POLL_BACKOFF_MS);
-        if (newInterval !== this.currentPollInterval) {
-          this.currentPollInterval = newInterval;
-          this.resetPollInterval();
-          console.warn(`[LiveDataSource] Backing off poll interval to ${newInterval}ms`);
-        }
+    if (statsResult.status === 'fulfilled' && statsResult.value) {
+      this.applyStats(
+        statsResult.value,
+        blocksResult.status === 'fulfilled' ? blocksResult.value : []
+      );
+    }
+    if (blocksResult.status === 'fulfilled') {
+      // Spread this batch over the time the previous one took to arrive, which includes
+      // API latency, so pulses stay continuous even when responses are slow
+      const now = Date.now();
+      const sinceLastBatch = now - this.lastBatchAt;
+      this.lastBatchAt = now;
+      this.replayBlocks(blocksResult.value, sinceLastBatch);
+    }
+    if (txResult.status === 'fulfilled') this.emitTransactions(txResult.value);
+
+    // Keep a steady cadence: time spent waiting on the API counts toward the interval
+    const elapsed = Date.now() - pollStartedAt;
+    if (!document.hidden) this.schedulePoll(Math.max(0, this.currentPollInterval - elapsed));
+  }
+
+  private applyStats(stats: ApiStats, blocks: ApiBlock[]): void {
+    const now = Date.now();
+    if (this.lastStatsTime > 0 && now > this.lastStatsTime) {
+      const txDelta = Math.max(0, stats.transactions - this.totalTxs);
+      this.tps = Math.round((txDelta / ((now - this.lastStatsTime) / 1000)) * 100) / 100;
+    }
+    this.totalTxs = stats.transactions;
+    this.lastStatsTime = now;
+
+    // Anchor the epoch's start round to the newest block fetched alongside these stats
+    const newestRound = blocks.reduce((max, b) => Math.max(max, b.round), 0);
+    if (newestRound > 0) this.epochStartRound = newestRound - stats.roundsPassed;
+
+    if (stats.epoch > this.currentEpoch) {
+      const isFirstLoad = this.currentEpoch === 0;
+      this.currentEpoch = stats.epoch;
+      this.lastEmittedRound = stats.roundsPassed;
+      if (!isFirstLoad) this.refreshValidators();
+    }
+    this.emitStats();
+  }
+
+  private emitStats(): void {
+    this.callbacks?.onStatsUpdate({
+      tps: this.tps,
+      totalTransactions: this.totalTxs,
+      epoch: this.currentEpoch,
+      round: Math.max(0, this.lastEmittedRound),
+    });
+  }
+
+  /** Returns true the first time a block is seen. */
+  private markBlockSeen(block: ApiBlock): boolean {
+    const key = `${block.shard}:${block.nonce}`;
+    if (this.seenBlocks.has(key)) return false;
+    this.seenBlocks.add(key);
+    if (this.seenBlocks.size > this.MAX_SEEN_BLOCKS) {
+      // Sets iterate in insertion order, so the first entries are the oldest
+      let excess = this.seenBlocks.size - this.MAX_SEEN_BLOCKS;
+      for (const k of this.seenBlocks) {
+        if (excess-- <= 0) break;
+        this.seenBlocks.delete(k);
       }
+    }
+    return true;
+  }
+
+  /** Replays fresh blocks in chain order, spread across roughly one poll cycle. */
+  private replayBlocks(blocks: ApiBlock[], cycleMs: number): void {
+    const fresh = blocks
+      .filter((b) => this.markBlockSeen(b))
+      .sort((a, b) => blockTimeMs(a) - blockTimeMs(b));
+    if (fresh.length === 0) return;
+
+    const first = blockTimeMs(fresh[0]);
+    const span = blockTimeMs(fresh[fresh.length - 1]) - first;
+    const windowMs = Math.min(Math.max(cycleMs, 1000), MAX_POLL_BACKOFF_MS) * 0.9;
+    const scale = span > windowMs ? windowMs / span : 1;
+
+    for (const block of fresh) {
+      const timer = setTimeout(() => {
+        this.replayTimers.delete(timer);
+        this.emitBlock(block);
+      }, (blockTimeMs(block) - first) * scale);
+      this.replayTimers.add(timer);
+    }
+  }
+
+  private emitBlock(block: ApiBlock): void {
+    if (!this.callbacks) return;
+
+    if (block.epoch > this.currentEpoch) {
+      // Epoch rollover seen in blocks before the next stats refresh
+      this.currentEpoch = block.epoch;
+      this.epochStartRound = block.round;
+      this.lastEmittedRound = -1;
+      this.refreshValidators();
+    }
+
+    this.callbacks.onNewBlock(mapBlock(block));
+
+    const round = block.round - this.epochStartRound;
+    if (round > this.lastEmittedRound) {
+      this.lastEmittedRound = round;
+      this.emitStats();
+    }
+  }
+
+  private emitTransactions(rawTxs: ApiTransaction[]): void {
+    if (!this.callbacks) return;
+
+    const newTxs: TransactionData[] = [];
+    for (const raw of rawTxs) {
+      if (!this.seenTxHashes.has(raw.txHash)) {
+        this.seenTxHashes.add(raw.txHash);
+        newTxs.push(mapTransaction(raw));
+      }
+    }
+
+    // Bound the seen tx set
+    if (this.seenTxHashes.size > this.MAX_SEEN_TX) {
+      const arr = Array.from(this.seenTxHashes);
+      this.seenTxHashes = new Set(arr.slice(arr.length - this.MAX_SEEN_TX));
+    }
+
+    if (newTxs.length > 0) {
+      // Round-robin diversity: reorder to prioritize showing one of each type
+      this.callbacks.onNewTransactions(this.diversifyTransactions(newTxs));
     }
   }
 
@@ -409,17 +496,13 @@ export class LiveDataSource implements DataSource {
     return result;
   }
 
-  private resetPollInterval(): void {
-    if (this.pollTimer !== null) {
-      clearInterval(this.pollTimer);
-      this.pollTimer = setInterval(() => this.poll(), this.currentPollInterval);
-    }
-  }
-
   private async refreshValidators(): Promise<void> {
     try {
-      const nodes = await this.fetchWithRetry<ApiNode[]>(
-        `${API_BASE}/nodes?type=validator&size=${API_VALIDATOR_FETCH_SIZE}`
+      const nodes = await this.fetchJson<ApiNode[]>(
+        `${API_BASE}/nodes?type=validator&size=${API_VALIDATOR_FETCH_SIZE}&fields=${NODE_FIELDS}`,
+        1,
+        undefined,
+        NODES_TIMEOUT_MS
       );
       this.buildValidatorCaches(nodes);
       if (this.callbacks) {
@@ -430,36 +513,32 @@ export class LiveDataSource implements DataSource {
     }
   }
 
-  private async fetchWithRetry<T>(url: string, retries = 2): Promise<T> {
-    let lastError: Error | null = null;
+  /**
+   * Polls pass retries = 0: the poll loop is the retry, with backoff. Only startup and
+   * the daily validator refresh retry inline, with a few seconds between attempts.
+   */
+  private async fetchJson<T>(
+    url: string,
+    retries = 0,
+    init?: RequestInit,
+    timeoutMs = FETCH_TIMEOUT_MS
+  ): Promise<T> {
+    let lastError: unknown = null;
 
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
-        const response = await fetch(url);
-
-        if (response.status === 429) {
-          // Rate limited: exponential backoff
-          const delay = Math.min(1000 * Math.pow(2, attempt), 8000);
-          await this.sleep(delay);
-          continue;
-        }
-
+        const response = await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
-
         return (await response.json()) as T;
       } catch (err) {
-        lastError = err instanceof Error ? err : new Error(String(err));
-
-        if (attempt < retries) {
-          const delay = Math.min(500 * Math.pow(2, attempt), 4000);
-          await this.sleep(delay);
-        }
+        lastError = err;
+        if (attempt < retries) await this.sleep(2000 * 2 ** attempt);
       }
     }
 
-    throw lastError ?? new Error(`Failed to fetch ${url}`);
+    throw lastError instanceof Error ? lastError : new Error(`Failed to fetch ${url}`);
   }
 
   private sleep(ms: number): Promise<void> {

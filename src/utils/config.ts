@@ -27,14 +27,19 @@ export const CAMERA_INACTIVITY_RESUME_MS = 15_000;
 // Supernova block time: 600ms rounds
 export const BLOCK_TIME_MS = 600;
 
-// API — poll every 2s (catches ~3 blocks per poll at 600ms rounds)
+// API: one combined poll every 6s. All shards' blocks arrive in a single request and are
+// replayed across the interval, keeping each visitor at about 0.4 requests/s, well under
+// the public API's per-IP rate limit.
 export const API_BASE = 'https://api.multiversx.com';
 export const EXPLORER_BASE = 'https://explorer.multiversx.com';
-export const POLL_INTERVAL_MS = 2_000;
+export const POLL_INTERVAL_MS = 6_000;
+export const STATS_EVERY_N_POLLS = 5; // network stats about every 30s
 export const API_VALIDATOR_FETCH_SIZE = 10_000;
-export const API_BLOCK_FETCH_SIZE = 10;
+export const API_BLOCK_FETCH_SIZE = 100; // all shards: ~40 blocks per 6s at 600ms rounds
 export const API_TX_FETCH_SIZE = 50;
-export const MAX_POLL_BACKOFF_MS = 30_000;
+export const MAX_POLL_BACKOFF_MS = 60_000;
+// Live transactions drain over most of a poll interval, so particles flow evenly
+export const LIVE_DRAIN_SECONDS = (POLL_INTERVAL_MS / 1000) * 0.9;
 
 // Bloom
 export const BLOOM_STRENGTH = 0.8;

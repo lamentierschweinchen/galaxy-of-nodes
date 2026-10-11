@@ -3,7 +3,7 @@ import { MockDataGenerator, MockTransaction } from './MockData';
 import { TransactionPool } from '../particles/TransactionPool';
 import { ValidatorField } from '../scene/ValidatorField';
 import { MetachainCore } from '../scene/MetachainCore';
-import { METACHAIN_SHARD_ID } from '../utils/config';
+import { METACHAIN_SHARD_ID, LIVE_DRAIN_SECONDS } from '../utils/config';
 
 /**
  * Drives the visualization in two modes:
@@ -41,6 +41,7 @@ export class SimulationEngine {
   // --- Live-mode state ---
   private liveTxQueue: TransactionData[] = [];
   private liveTxDrainTimer = 0;
+  private liveTxDrainStep = 0.1;
   private liveRound = 0;
   private liveEpoch = 0;
 
@@ -218,10 +219,9 @@ export class SimulationEngine {
     // Drain live tx queue gradually (spread over poll interval)
     if (this.liveTxQueue.length > 0) {
       this.liveTxDrainTimer += dt;
-      // Spread queued txs evenly over ~1.8s (drain before next 2s poll)
-      const drainInterval = Math.max(0.02, 1.8 / Math.max(1, this.liveTxQueue.length));
-      if (this.liveTxDrainTimer >= drainInterval) {
-        this.liveTxDrainTimer -= drainInterval;
+      // Step is fixed per batch (set on arrival) so the whole queue spreads evenly
+      if (this.liveTxDrainTimer >= this.liveTxDrainStep) {
+        this.liveTxDrainTimer -= this.liveTxDrainStep;
         const tx = this.liveTxQueue.shift();
         if (tx) this.spawnLiveTxParticle(tx);
       }
@@ -262,6 +262,8 @@ export class SimulationEngine {
     if (this.liveTxQueue.length > 200) {
       this.liveTxQueue.splice(0, this.liveTxQueue.length - 200);
     }
+    // Drain everything queued over the next poll interval
+    this.liveTxDrainStep = Math.max(0.02, LIVE_DRAIN_SECONDS / Math.max(1, this.liveTxQueue.length));
 
     // Diversity-select for feed: round-robin by type
     const byType: Record<string, TransactionData[]> = {};
